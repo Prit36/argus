@@ -1,0 +1,6 @@
+{
+  "name": "Task Manager",
+  "identifier": "dev.nanotask.taskmgr",
+  "version": "0.2.0",
+  "out": "build"
+}
