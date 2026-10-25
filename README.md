@@ -1,8 +1,7 @@
-# Task Manager (Go + mygo)
+# Argus
 
-A native Windows 11 Task Manager, ported from the Zig/nanoui version in
-`../tt` to Go with the [mygo](https://github.com/egoist/mygo) native UI.
-The pages, layout and behavior match the Zig app: Processes (grouped
+A native Windows 11 Task Manager in Go, drawn with the
+[mygo](https://github.com/egoist/mygo) native UI: Processes (grouped
 apps / background / Windows processes, heat-colored cells, column
 chooser), Performance (CPU, memory, disks, network adapters and GPUs with
 60-second graphs), App history, Startup apps, Users, Details, Services
@@ -36,14 +35,14 @@ hand their results back through `Window.Update`.
 ## Performance
 
 Measured on an i5-12400F / RTX 5060, 1080×720 window, Processes page,
-release builds, steady state:
+release build, steady state:
 
-| | Go (this) | Zig (`../tt`) |
-|---|---:|---:|
-| CPU (one core) | ~0.5% | ~0.3% |
-| Working set | ~44 MB | ~61 MB |
-| Private bytes | ~68 MB | ~70 MB |
-| Threads | ~21 | ~19 |
+| | |
+|---|---:|
+| CPU (one core) | ~0.5% |
+| Working set | ~44 MB |
+| Private bytes | ~68 MB |
+| Threads | ~21 |
 
 - A sample (all processes, rates, groups) takes ~1 ms and allocates
   nothing (`go test ./internal/sys -bench Sample -benchmem`).
@@ -57,8 +56,7 @@ release builds, steady state:
 ## Files
 
 Settings (`settings.ini`) and app history (`history.tsv`) are kept in
-`%LOCALAPPDATA%\nanotask`, in the same format as the Zig app, which shares
-them. mygo keeps the window's place in `%APPDATA%\Task Manager`.
+`%LOCALAPPDATA%\argus`. mygo keeps the window's place in `%APPDATA%\Task Manager`.
 
 ## Testing hooks
 

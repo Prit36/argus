@@ -12,7 +12,7 @@ import (
 // The Microsoft-Windows-Kernel-Network provider.
 var kernelNetwork = windows.GUID{Data1: 0x7dd42a49, Data2: 0x5329, Data3: 0x4832, Data4: [8]byte{0x8d, 0xfd, 0x43, 0xd9, 0x79, 0x15, 0x3a, 0x88}}
 
-var traceName = windows.StringToUTF16("nanotask network")
+var traceName = windows.StringToUTF16("argus network")
 
 // traceProps are a session's settings, its name after them.
 type traceProps struct {

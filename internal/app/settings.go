@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Settings are kept between runs in %LOCALAPPDATA%\nanotask\settings.ini
+// Settings are kept between runs in %LOCALAPPDATA%\argus\settings.ini
 // as key=value lines: the theme, the update speed, the page to start on,
 // and how the window and its tables were left.
 type Settings struct {
@@ -41,7 +41,7 @@ func dataDir() string {
 	if base == "" {
 		base = os.TempDir()
 	}
-	return filepath.Join(base, "nanotask")
+	return filepath.Join(base, "argus")
 }
 
 // fields lists the settings by their keys in the file.
