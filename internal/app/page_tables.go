@@ -197,36 +197,8 @@ func (a *App) startupPage(c *ui.Context, k *colors) {
 			ui.Text(c, "Last BIOS time:  "+string(fixed(nil, float64(bios), 1))+" seconds").FontSize(fontSmall).TextColor(k.secondary).NoWrap()
 		}
 	})
-	// Sorted by the column clicked; searched.
 	items := a.startup
 	q := strings.TrimSpace(a.query)
-	a.startupOrder = a.startupOrder[:0]
-	for i := range items {
-		if q != "" && !containsFold(items[i].Name, q) && !containsFold(items[i].Publisher, q) {
-			continue
-		}
-		a.startupOrder = append(a.startupOrder, int32(i))
-	}
-	by, asc := a.startupSort, a.startupAsc
-	slices.SortFunc(a.startupOrder, func(x, y int32) int {
-		p, r := &items[x], &items[y]
-		var c int
-		switch by {
-		case 1:
-			c = cmpFold(p.Publisher, r.Publisher)
-		case 2, 3:
-			c = cmp3(b2i(r.Enabled), b2i(p.Enabled))
-		default:
-			c = cmpFold(p.Name, r.Name)
-		}
-		if c == 0 {
-			return cmpFold(p.Name, r.Name)
-		}
-		if !asc {
-			return -c
-		}
-		return c
-	})
 	cols := startupCols
 	clicked, header := tableHeader(c, k, cols[:], int(a.startupSort), a.startupAsc, compactHeaderH, 760, true, nil)
 	if clicked >= 0 {
@@ -235,6 +207,9 @@ func (a *App) startupPage(c *ui.Context, k *colors) {
 		} else {
 			a.startupSort, a.startupAsc = uint8(clicked), true
 		}
+		a.dirty = true
+		a.refreshRows()
+		a.saveSettings()
 	}
 	if len(a.startupOrder) == 0 {
 		msg := "There are no startup items to display"
@@ -317,6 +292,7 @@ func (a *App) setStartupEnabled(on bool) {
 	if it.SetEnabled(on) != nil {
 		a.toast("error", "Couldn't change it: this one needs administrator rights")
 	}
+	a.dirty = true
 }
 
 var historyCols = [...]column{
@@ -346,6 +322,90 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 			ui.Text(c, "Network use is counted when Task Manager runs as administrator.").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
 		}
 	})
+	q := strings.TrimSpace(a.query)
+	cols := historyCols
+	clicked, header := tableHeader(c, k, cols[:], int(a.historySort), a.historyAsc, compactHeaderH, 560, true, nil)
+	if clicked >= 0 {
+		if int(a.historySort) == clicked {
+			a.historyAsc = !a.historyAsc
+		} else {
+			a.historySort, a.historyAsc = uint8(clicked), clicked == 0
+		}
+		a.dirty = true
+		a.refreshRows()
+		a.saveSettings()
+	}
+	if len(a.historyRows) == 0 {
+		msg := "No app history yet: it's counted while Task Manager runs"
+		if q != "" {
+			msg = noResults(q)
+		}
+		empty(c, k, msg)
+		return
+	}
+	s := &a.historyList
+	s.Key = a.historyRowKey
+	a.tableList(c, "history-table", s, len(a.historyRows), 560, header, func(lr ui.ListRow) {
+		c := lr.Context
+		e := &h.List[a.historyRows[lr.Index]]
+		ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).Tooltip(e.Path).Children(func() {
+			cell(c, &cols[0]).Gap(8).Children(func() {
+				a.exeIcon(c, e.Exe)
+				ui.Text(c, e.Title).FontSize(fontCaption).TextColor(k.text).SingleLine()
+			})
+			textCell(c, &cols[1], fmtCPUTime(e.CPU), k.text)
+			textCell(c, &cols[2], mbTotal(e.Net), k.text)
+		})
+	})
+}
+
+func (a *App) historyRowKey(i int) any {
+	if i < len(a.historyRows) {
+		return a.history.List[a.historyRows[i]].Key
+	}
+	return i
+}
+
+func (a *App) buildStartup() {
+	// Sorted by the column clicked; searched.
+	items := a.startup
+	q := strings.TrimSpace(a.query)
+	a.startupOrder = a.startupOrder[:0]
+	for i := range items {
+		status := "Disabled"
+		if items[i].Enabled {
+			status = "Enabled"
+		}
+		if q != "" && !containsFold(items[i].Name, q) && !containsFold(items[i].Publisher, q) &&
+			!containsFold(items[i].Path, q) && !containsFold(status, q) {
+			continue
+		}
+		a.startupOrder = append(a.startupOrder, int32(i))
+	}
+	by, asc := a.startupSort, a.startupAsc
+	slices.SortFunc(a.startupOrder, func(x, y int32) int {
+		p, r := &items[x], &items[y]
+		var c int
+		switch by {
+		case 1:
+			c = cmpFold(p.Publisher, r.Publisher)
+		case 2, 3:
+			c = cmp3(b2i(r.Enabled), b2i(p.Enabled))
+		default:
+			c = cmpFold(p.Name, r.Name)
+		}
+		if c == 0 {
+			return cmpFold(p.Name, r.Name)
+		}
+		if !asc {
+			return -c
+		}
+		return c
+	})
+}
+
+func (a *App) buildHistory() {
+	h := a.history
 	// The rows: apps (or every program, as Settings says), searched.
 	q := strings.TrimSpace(a.query)
 	a.historyRows = a.historyRows[:0]
@@ -379,42 +439,4 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 		}
 		return c
 	})
-	cols := historyCols
-	clicked, header := tableHeader(c, k, cols[:], int(a.historySort), a.historyAsc, compactHeaderH, 560, true, nil)
-	if clicked >= 0 {
-		if int(a.historySort) == clicked {
-			a.historyAsc = !a.historyAsc
-		} else {
-			a.historySort, a.historyAsc = uint8(clicked), clicked == 0
-		}
-	}
-	if len(a.historyRows) == 0 {
-		msg := "No app history yet: it's counted while Task Manager runs"
-		if q != "" {
-			msg = noResults(q)
-		}
-		empty(c, k, msg)
-		return
-	}
-	s := &a.historyList
-	s.Key = a.historyRowKey
-	a.tableList(c, "history-table", s, len(a.historyRows), 560, header, func(lr ui.ListRow) {
-		c := lr.Context
-		e := &h.List[a.historyRows[lr.Index]]
-		ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).Tooltip(e.Path).Children(func() {
-			cell(c, &cols[0]).Gap(8).Children(func() {
-				a.exeIcon(c, e.Exe)
-				ui.Text(c, e.Title).FontSize(fontCaption).TextColor(k.text).SingleLine()
-			})
-			textCell(c, &cols[1], fmtCPUTime(e.CPU), k.text)
-			textCell(c, &cols[2], mbTotal(e.Net), k.text)
-		})
-	})
-}
-
-func (a *App) historyRowKey(i int) any {
-	if i < len(a.historyRows) {
-		return a.history.List[a.historyRows[i]].Key
-	}
-	return i
 }

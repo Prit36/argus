@@ -3,9 +3,9 @@ package app
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
-	"fmt"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -140,6 +140,9 @@ func (a *App) start() {
 		a.maximized = win.IsMaximized()
 		a.dirty = true
 		a.syncPerformance(false)
+		a.timerOn = false
+		a.timerGen++
+		a.startTimer()
 		win.Invalidate()
 	}
 	win.OnMaximize(sync)
@@ -152,6 +155,9 @@ func (a *App) start() {
 			win.Hide()
 		}
 		a.syncPerformance(false)
+		a.timerOn = false
+		a.timerGen++
+		a.startTimer()
 	})
 	win.OnClose(func(*mygo.CloseEvent) {
 		// The content's size, kept as the window was left.

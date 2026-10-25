@@ -124,15 +124,15 @@ type PerfTab struct {
 
 // App is the task manager's state.
 type App struct {
-	win    *mygo.Window
+	win *mygo.Window
 	// The window as goroutines see it, and what they posted before it
 	// was made (the first sample runs while mygo starts).
 	posted  atomic.Pointer[mygo.Window]
 	earlyMu sync.Mutex
 	early   []func()
-	hwnd   windows.HWND
-	tray   *mygo.Tray
-	closed bool
+	hwnd    windows.HWND
+	tray    *mygo.Tray
+	closed  bool
 
 	exes     *sys.ExeCache
 	sampler  *sys.Sampler
@@ -171,11 +171,12 @@ type App struct {
 	cores                        []sys.Ring
 	model                        *Model
 	// dirty: the rows are to be built again before they're drawn.
-	dirty      bool
-	samples    uint64
-	lastSample time.Time
-	timerGen   uint64
-	timerOn    bool
+	dirty       bool
+	samples     uint64
+	lastSample  time.Time
+	resumeSpeed Speed
+	timerGen    uint64
+	timerOn     bool
 	// windir is the Windows folder, lower-cased with its trailing slash.
 	windir string
 
@@ -199,6 +200,7 @@ type App struct {
 	procList  ui.ListState
 	query     string
 	lastQuery string
+	queries   [8]string
 	rowsPage  Page
 	search    ui.Handle
 	revealSel bool
@@ -233,6 +235,9 @@ type App struct {
 	hasUserSel   bool
 	userProcSel  uint64
 	usersOpen    map[uint32]bool
+	userRows     []int32
+	userOrder    []int32
+	userSums     map[uint32]userSum
 	historySort  uint8
 	historyAsc   bool
 	historyRows  []int32
@@ -317,6 +322,15 @@ func newApp() *App {
 		a.set.Speed = SpeedNormal
 	}
 	a.page = a.set.StartPage
+	a.sort, a.ascending = a.set.ProcSort, a.set.ProcAscending
+	a.detailsSort, a.detailsAsc = a.set.DetailsSort, a.set.DetailsAscending
+	a.servicesSort, a.servicesAsc = a.set.ServicesSort, a.set.ServicesAscending
+	a.startupSort, a.startupAsc = a.set.StartupSort, a.set.StartupAscending
+	a.historySort, a.historyAsc = a.set.HistorySort, a.set.HistoryAscending
+	a.resumeSpeed = SpeedNormal
+	if a.set.Speed != SpeedPaused {
+		a.resumeSpeed = a.set.Speed
+	}
 	windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &a.session)
 	a.icons.init()
 	return a
@@ -580,6 +594,7 @@ func (a *App) refreshSessions(every time.Duration) {
 			a.sessionsBusy = false
 			a.sessionsAt = time.Now()
 			a.sessions = list
+			a.dirty = true
 		})
 	}()
 }
@@ -594,7 +609,18 @@ func (a *App) readStartup() {
 		list := sys.ReadStartup(a.exes)
 		a.post(func() {
 			a.startupBusy, a.startupRead = false, true
+			selected := a.startupItem()
 			a.startup = list
+			a.startupSel = -1
+			if selected != nil {
+				for i := range list {
+					if list[i].Name == selected.Name && list[i].Value == selected.Value && list[i].Command == selected.Command {
+						a.startupSel = i
+						break
+					}
+				}
+			}
+			a.dirty = true
 		})
 	}()
 }
@@ -602,6 +628,11 @@ func (a *App) readStartup() {
 // startTimer samples on the update speed's timer.
 func (a *App) startTimer() {
 	d := a.set.Speed.Interval()
+	// Keep tray and history useful while avoiding high-frequency work for
+	// a window that cannot be seen. Rates still use actual elapsed time.
+	if a.win != nil && !a.shown() && d > 0 {
+		d = max(d, 4*time.Second)
+	}
 	if d == 0 || a.timerOn {
 		return
 	}
@@ -629,6 +660,9 @@ func (a *App) setSpeed(s Speed) {
 		return
 	}
 	a.set.Speed = s
+	if s != SpeedPaused {
+		a.resumeSpeed = s
+	}
 	// The next tick comes at the new speed.
 	a.timerOn = false
 	a.timerGen++
@@ -636,7 +670,44 @@ func (a *App) setSpeed(s Speed) {
 	a.saveSettings()
 }
 
-func (a *App) saveSettings() { a.set.save() }
+func (a *App) saveSettings() {
+	a.set.ProcSort, a.set.ProcAscending = a.sort, a.ascending
+	a.set.DetailsSort, a.set.DetailsAscending = a.detailsSort, a.detailsAsc
+	a.set.ServicesSort, a.set.ServicesAscending = a.servicesSort, a.servicesAsc
+	a.set.StartupSort, a.set.StartupAscending = a.startupSort, a.startupAsc
+	a.set.HistorySort, a.set.HistoryAscending = a.historySort, a.historyAsc
+	a.set.save()
+}
+
+func (a *App) togglePaused() {
+	if a.set.Speed == SpeedPaused {
+		speed := a.resumeSpeed
+		if speed >= SpeedPaused {
+			speed = SpeedNormal
+		}
+		a.setSpeed(speed)
+	} else {
+		a.setSpeed(SpeedPaused)
+	}
+}
+
+// refreshNow also reloads the current page's less frequently sampled data.
+func (a *App) refreshNow() {
+	a.sample()
+	switch a.page {
+	case PageServices:
+		a.refreshServices(0)
+	case PageStartup:
+		a.readStartup()
+	case PageUsers:
+		a.refreshSessions(0)
+	case PagePerformance:
+		if a.perfTab.Kind == PerfNet {
+			a.requestAddresses()
+		}
+	}
+	a.updateTray()
+}
 
 // procTitle is a process's title on the Processes page: its description,
 // and for a Service Host, the service it runs.
@@ -658,6 +729,24 @@ func (a *App) procTitle(p *sys.Proc) string {
 // refreshRows builds the page's rows again if something changed.
 func (a *App) refreshRows() {
 	if a.query != a.lastQuery || a.rowsPage != a.page {
+		if a.query != a.lastQuery {
+			var list *ui.ListState
+			switch a.page {
+			case PageProcesses:
+				list = &a.procList
+			case PageDetails:
+				list = &a.detailsList
+			case PageServices:
+				list = &a.servicesList
+			case PageStartup:
+				list = &a.startupList
+			case PageAppHistory:
+				list = &a.historyList
+			}
+			if list != nil {
+				list.ScrollTo(0, ui.Start)
+			}
+		}
 		a.lastQuery = a.query
 		a.dirty = true
 	}
@@ -680,10 +769,18 @@ func (a *App) refreshRows() {
 		a.buildDetails()
 	case PageServices:
 		a.buildServices()
+	case PageStartup:
+		a.buildStartup()
+	case PageAppHistory:
+		a.buildHistory()
+	case PageUsers:
+		a.buildUsers()
 	}
 }
 
 func (a *App) sortBy(key Sort) {
+	// A column click requests a global ranking, across all categories.
+	a.set.GroupByType = false
 	if a.sort == key {
 		a.ascending = !a.ascending
 	} else {
@@ -697,6 +794,7 @@ func (a *App) sortBy(key Sort) {
 		}
 	}
 	a.dirty = true
+	a.saveSettings()
 }
 
 func (a *App) detailsSortBy(key Sort) {
@@ -712,6 +810,7 @@ func (a *App) detailsSortBy(key Sort) {
 		}
 	}
 	a.dirty = true
+	a.saveSettings()
 }
 
 func b2i(b bool) int {
@@ -788,7 +887,8 @@ func (a *App) buildDetails() {
 }
 
 func detailMatches(p *sys.Proc, q string) bool {
-	return containsFold(p.Info.Name, q) || containsFold(p.Info.Title(), q) || containsFold(p.Info.User, q) || pidHasPrefix(p.PID, q)
+	return containsFold(p.Info.Name, q) || containsFold(p.Info.Title(), q) || containsFold(p.Info.User, q) ||
+		containsFold(p.Info.Company(), q) || containsFold(p.Info.Path(), q) || containsFold(p.Info.Cmdline, q) || pidHasPrefix(p.PID, q)
 }
 
 func (a *App) servicesSortBy(col uint8) {
@@ -798,6 +898,7 @@ func (a *App) servicesSortBy(col uint8) {
 		a.servicesSort, a.servicesAsc = col, true
 	}
 	a.dirty = true
+	a.saveSettings()
 }
 
 func (a *App) buildServices() {
@@ -808,7 +909,8 @@ func (a *App) buildServices() {
 	list := a.services.List
 	q := strings.TrimSpace(a.query)
 	for i := range list {
-		if q != "" && !containsFold(list[i].Name, q) && !containsFold(list[i].Display, q) {
+		if q != "" && !containsFold(list[i].Name, q) && !containsFold(list[i].Display, q) &&
+			!containsFold(list[i].Group, q) && !containsFold(list[i].State.String(), q) && !pidHasPrefix(list[i].PID, q) {
 			continue
 		}
 		a.servicesRows = append(a.servicesRows, int32(i))

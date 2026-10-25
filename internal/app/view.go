@@ -110,6 +110,8 @@ func (a *App) goTo(page Page) {
 	if a.page == page {
 		return
 	}
+	a.queries[a.page] = a.query
+	a.query = a.queries[page]
 	a.page = page
 	a.dirty = true
 	switch page {
@@ -130,14 +132,21 @@ func (a *App) goTo(page Page) {
 }
 
 // typing reports whether a text field has the keys.
-func (a *App) typing(c *ui.Context) bool { return a.search.Focused(c) || a.runOpen }
+func (a *App) typing(c *ui.Context) bool { return a.search.Focused(c) || a.modalOpen() }
+
+func (a *App) modalOpen() bool {
+	return a.runOpen || a.confirmEnd || a.confirmEfficiency || a.confirmUser != userNone || a.historyConfirm || a.affinityOpen
+}
 
 // keys are Task Manager's keys: Delete ends the selection, the arrows
 // (and Home, End, Page Up and Down) move it, Enter opens a group, Ctrl+F
-// finds, F5 samples now, Ctrl+1–8 and Ctrl+Tab change pages, Ctrl+C copies
-// the Performance figures. (The menu key and Shift+F10 open the focused
-// table's menu, as mygo's context menus do.)
+// finds, F5 refreshes now, Ctrl+P pauses, Ctrl+1–8 and Ctrl+Tab change pages,
+// Ctrl+C copies the selection or Performance figures. (The menu key and
+// Shift+F10 open the focused table's menu, as mygo's context menus do.)
 func (a *App) keys(c *ui.Context) {
+	if a.modalOpen() {
+		return
+	}
 	if c.Shortcut(ui.Ctrl, ui.KeyF) || c.Shortcut(ui.Ctrl, ui.KeyE) {
 		a.search.Focus(c)
 	}
@@ -165,9 +174,19 @@ func (a *App) keys(c *ui.Context) {
 		}
 	}
 	if c.Shortcut(0, ui.KeyF5) {
-		a.sample()
+		a.refreshNow()
 	}
 	typing := a.typing(c)
+	if !typing && c.Shortcut(ui.Ctrl, ui.KeyP) {
+		a.togglePaused()
+	}
+	if !typing && c.Shortcut(ui.Ctrl, ui.KeyC) {
+		if a.page == PagePerformance {
+			a.copySummary()
+		} else {
+			a.copySelection()
+		}
+	}
 	_, h := c.Size()
 	pageRows := max(1, int((h-160)/rowH))
 	switch a.page {
@@ -192,10 +211,6 @@ func (a *App) keys(c *ui.Context) {
 		}
 		if !typing && c.Shortcut(0, ui.KeyDelete) {
 			a.endDetails(false)
-		}
-	case PagePerformance:
-		if !typing && c.Shortcut(ui.Ctrl, ui.KeyC) {
-			a.copySummary()
 		}
 	}
 	if c.Shortcut(0, ui.KeyEscape) {

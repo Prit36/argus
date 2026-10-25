@@ -28,6 +28,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 		})
 		ui.Spacer(c)
 		a.searchBox(c, k)
+		a.pauseButton(c, k)
 		a.captionButtons(c, k, textColor)
 	})
 }
@@ -47,7 +48,7 @@ func logo(c *ui.Context, k *colors, size float32) {
 
 func (a *App) searchBox(c *ui.Context, k *colors) {
 	w, _ := c.Size()
-	const leftMin, rightMin = 148, 3*captionW + 16
+	const leftMin, rightMin = 148, 3*captionW + 56
 	maxAvail := max(180, w-leftMin-rightMin)
 	sw := min(maxAvail, min(max(w*0.38, 220), 420))
 	x := min(max((w-sw)/2, leftMin), max(leftMin, w-rightMin-sw))
@@ -57,19 +58,29 @@ func (a *App) searchBox(c *ui.Context, k *colors) {
 		border = k.accent
 	}
 	placeholder := "Type a name, publisher, or PID"
-	if a.page == PageServices {
+	switch a.page {
+	case PageServices:
 		placeholder = "Search services"
-	} else if sw < 340 {
-		placeholder = "Search name or PID"
+	case PageStartup:
+		placeholder = "Search startup apps"
+	case PageAppHistory:
+		placeholder = "Search app history"
+	case PageUsers:
+		placeholder = "Search users or processes"
+	default:
+		if sw < 340 {
+			placeholder = "Search name or PID"
+		}
 	}
 	box := ui.Row(c.Key("search")).Absolute().Left(round(x)).Top(8).Width(round(sw)).Height(32).
 		AlignItems(ui.Center).Gap(8).Padding(0, 6, 0, 10).Radius(4).Background(k.field).Border(1, border)
 	box.Children(func() {
 		icon(c, icSearch, 14, k.secondary)
 		in := ui.TextInputBase(c, &a.query).Bind(&a.search).Grow(1).MinWidth(0).FontSize(fontCaption).TextColor(k.text).Placeholder(placeholder).Label("Search")
-		// Searching shows the processes found (from any page but these).
-		if in.Changed() && a.page != PageProcesses && a.page != PageDetails && a.page != PageServices {
+		if in.Changed() && (a.page == PagePerformance || a.page == PageSettings) {
+			query := a.query
 			a.goTo(PageProcesses)
+			a.query = query
 		}
 		if a.query != "" {
 			x := ui.ButtonBase(c.Key("clear")).Size(24, 24).Radius(4).Label("Clear search").Shrink(0)
@@ -86,6 +97,26 @@ func (a *App) searchBox(c *ui.Context, k *colors) {
 			ui.Box(c).Absolute().Left(0).Right(0).Bottom(-1).Height(2).Radius(1).Background(k.accent)
 		}
 	})
+}
+
+func (a *App) pauseButton(c *ui.Context, k *colors) {
+	paused := a.set.Speed == SpeedPaused
+	label, glyph := "Pause updates", icPause
+	if paused {
+		label, glyph = "Resume updates", icPlay
+	}
+	b := ui.ButtonBase(c.Key("pause-updates")).Size(32, 32).Radius(4).Shrink(0).
+		Label(label).Tooltip(label + " (Ctrl+P; F5 refreshes once)")
+	if paused {
+		b.Background(k.rowSelected)
+	} else if b.Hovered() {
+		b.Background(k.hover)
+	}
+	if b.Clicked() {
+		a.togglePaused()
+	}
+	b.Children(func() { icon(c, glyph, 14, k.text) })
+	ui.Box(c).Width(8).Shrink(0)
 }
 
 // captionButtons are minimize, maximize (or restore) and close.

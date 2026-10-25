@@ -29,10 +29,16 @@ type Settings struct {
 	FullAccountName bool
 	HistoryAll      bool
 	KernelTimes     bool
+
+	ProcSort, DetailsSort                                 Sort
+	ProcAscending, DetailsAscending                       bool
+	ServicesSort, StartupSort, HistorySort                uint8
+	ServicesAscending, StartupAscending, HistoryAscending bool
 }
 
 func defaultSettings() Settings {
-	return Settings{Speed: SpeedNormal, GroupByType: true, NavOpen: true, ProcColumns: procDefault, DetailColumns: detailDefault, AskEfficiency: true}
+	return Settings{Speed: SpeedNormal, GroupByType: true, NavOpen: true, ProcColumns: procDefault, DetailColumns: detailDefault, AskEfficiency: true,
+		ProcAscending: true, DetailsAscending: true, ServicesAscending: true, StartupAscending: true, HistoryAscending: true}
 }
 
 // dataDir is the folder settings and App history are kept in.
@@ -75,6 +81,16 @@ func (s *Settings) fields() []struct {
 		{key: "full_account_name", b: &s.FullAccountName},
 		{key: "history_all", b: &s.HistoryAll},
 		{key: "kernel_times", b: &s.KernelTimes},
+		{key: "proc_sort", u8: (*uint8)(&s.ProcSort)},
+		{key: "proc_ascending", b: &s.ProcAscending},
+		{key: "details_sort", u8: (*uint8)(&s.DetailsSort)},
+		{key: "details_ascending", b: &s.DetailsAscending},
+		{key: "services_sort", u8: &s.ServicesSort},
+		{key: "services_ascending", b: &s.ServicesAscending},
+		{key: "startup_sort", u8: &s.StartupSort},
+		{key: "startup_ascending", b: &s.StartupAscending},
+		{key: "history_sort", u8: &s.HistorySort},
+		{key: "history_ascending", b: &s.HistoryAscending},
 	}
 }
 
@@ -109,6 +125,21 @@ func loadSettings() Settings {
 				*f.b = n != 0
 			}
 		}
+	}
+	if s.ProcSort > SortIsolation {
+		s.ProcSort = SortName
+	}
+	if s.DetailsSort > SortIsolation {
+		s.DetailsSort = SortName
+	}
+	if s.ServicesSort >= uint8(len(serviceCols)) {
+		s.ServicesSort = 0
+	}
+	if s.StartupSort >= uint8(len(startupCols)) {
+		s.StartupSort = 0
+	}
+	if s.HistorySort >= uint8(len(historyCols)) {
+		s.HistorySort = 0
 	}
 	return s
 }

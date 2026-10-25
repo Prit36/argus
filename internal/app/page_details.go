@@ -275,4 +275,6 @@ func (a *App) goToServices() {
 		a.toast("info", p.Info.Name+" runs no services")
 	}
 	a.goTo(PageServices)
+	a.query = ""
+	a.dirty = true
 }

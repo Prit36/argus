@@ -21,6 +21,7 @@ func (a *App) processMenu(m *ui.Menu) {
 	if r == nil {
 		return
 	}
+	a.copyMenu(m)
 	if r.Kind == RowGroup {
 		label := "Expand"
 		if r.Expanded {
@@ -69,6 +70,7 @@ func (a *App) detailsMenu(m *ui.Menu) {
 	if p == nil {
 		return
 	}
+	a.copyMenu(m)
 	pid, name, path, title := p.PID, p.Info.Name, p.Info.Path(), p.Info.Title()
 	if m.Item("End task").Shortcut(0, ui.KeyDelete).Chosen() {
 		a.endDetails(false)
@@ -114,6 +116,7 @@ func (a *App) serviceMenu(m *ui.Menu) {
 	if s == nil {
 		return
 	}
+	a.copyMenu(m)
 	running := s.State == sys.ServiceRunning
 	if m.Item("Start").Disabled(running).Chosen() {
 		a.controlService(sys.ServiceStart)
@@ -141,6 +144,7 @@ func (a *App) startupMenu(m *ui.Menu) {
 	if it == nil {
 		return
 	}
+	a.copyMenu(m)
 	if it.Enabled {
 		if m.Item("Disable").Chosen() {
 			a.setStartupEnabled(false)
@@ -189,6 +193,7 @@ func (a *App) userProcMenu(m *ui.Menu) {
 	if p == nil {
 		return
 	}
+	a.copyMenu(m)
 	pid, name, path, title := p.PID, p.Info.Name, p.Info.Path(), p.Info.Title()
 	if m.Item("End task").Chosen() {
 		a.endUserProc()
@@ -300,6 +305,15 @@ func (a *App) goToDetails(pid uint32) {
 		a.revealDet = true
 	}
 	a.goTo(PageDetails)
+	a.query = ""
+	a.dirty = true
+}
+
+func (a *App) copyMenu(m *ui.Menu) {
+	if m.Item("Copy row").Shortcut(ui.Ctrl, ui.KeyC).Chosen() {
+		a.copySelection()
+	}
+	m.Separator()
 }
 
 // copySummary puts the Performance page's figures on the clipboard, as its
@@ -364,6 +378,7 @@ func (a *App) dialogs(c *ui.Context, k *colors) {
 			"The processor time and network use counted for each app are forgotten, and counting starts again from now.",
 			"Cancel", "Delete") == 1 {
 			a.history.Clear()
+			a.dirty = true
 		}
 	}
 	a.affinityDialog(c, k)

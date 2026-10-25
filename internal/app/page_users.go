@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
@@ -53,25 +54,73 @@ func (a *App) usersPage(c *ui.Context, k *colors) {
 	tableHeader(c, k, cols[:], -1, true, compactHeaderH, 760, false, nil)
 	totalMem := float32(max(1, a.mem.Total))
 	ui.Scroll(c.Key("users")).FillWidth().Grow(1).MinHeight(0).Children(func() {
-		for i := range a.sessions {
+		for _, i := range a.userRows {
 			s := &a.sessions[i]
-			var sum userSum
-			for j := range a.sampler.Procs {
-				p := &a.sampler.Procs[j]
-				if p.Session == s.ID {
-					sum.cpu += p.CPU
-					sum.memory += p.PrivateWS
-					sum.disk += p.IO()
-					sum.net += p.Net
-					sum.count++
-				}
-			}
+			sum := a.userSums[s.ID]
 			a.userRow(c.Key(s.ID), k, s, &sum, cols[:], totalMem)
-			if a.usersOpen[s.ID] {
-				a.userPrograms(c, k, s.ID, cols[:], totalMem)
+			if a.usersOpen[s.ID] || strings.TrimSpace(a.query) != "" {
+				a.userPrograms(c, k, s, cols[:], totalMem)
 			}
 		}
+		if len(a.userRows) == 0 && a.query != "" {
+			empty(c, k, noResults(a.query))
+		}
 	})
+}
+
+func accountMatches(s *sys.Session, q string) bool {
+	return containsFold(s.User, q) || containsFold(s.Full, q) || containsFold(s.Domain, q)
+}
+
+// Build aggregates and the program order once per data/search change.
+func (a *App) buildUsers() {
+	if a.userSums == nil {
+		a.userSums = make(map[uint32]userSum)
+	}
+	clear(a.userSums)
+	a.userOrder = a.userOrder[:0]
+	for i := range a.sampler.Procs {
+		p := &a.sampler.Procs[i]
+		sum := a.userSums[p.Session]
+		sum.cpu += p.CPU
+		sum.memory += p.PrivateWS
+		sum.disk += p.IO()
+		sum.net += p.Net
+		sum.count++
+		a.userSums[p.Session] = sum
+		a.userOrder = append(a.userOrder, int32(i))
+	}
+	slices.SortFunc(a.userOrder, func(x, y int32) int {
+		p, q := &a.sampler.Procs[x], &a.sampler.Procs[y]
+		if p.Session != q.Session {
+			return cmp3(p.Session, q.Session)
+		}
+		if p.CPU != q.CPU {
+			return -cmp3(p.CPU, q.CPU)
+		}
+		if p.PrivateWS != q.PrivateWS {
+			return -cmp3(p.PrivateWS, q.PrivateWS)
+		}
+		return cmp3(p.PID, q.PID)
+	})
+	a.userRows = a.userRows[:0]
+	q := strings.TrimSpace(a.query)
+	for i := range a.sessions {
+		s := &a.sessions[i]
+		match := accountMatches(s, q)
+		if !match {
+			for _, pi := range a.userOrder {
+				p := &a.sampler.Procs[pi]
+				if p.Session == s.ID && detailMatches(p, q) {
+					match = true
+					break
+				}
+			}
+		}
+		if match {
+			a.userRows = append(a.userRows, int32(i))
+		}
+	}
 }
 
 func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, cols []column, totalMem float32) {
@@ -104,7 +153,7 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 				a.usersOpen[id] = !a.usersOpen[id]
 			}
 			ic := icChevronRight
-			if a.usersOpen[id] {
+			if a.usersOpen[id] || strings.TrimSpace(a.query) != "" {
 				ic = icChevronDown
 			}
 			o.Children(func() { icon(c, ic, 11, k.secondary) })
@@ -134,20 +183,21 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 }
 
 // userPrograms are the user's processes, busiest first.
-func (a *App) userPrograms(c *ui.Context, k *colors, session uint32, cols []column, totalMem float32) {
-	var list []*sys.Proc
-	for i := range a.sampler.Procs {
-		if p := &a.sampler.Procs[i]; p.Session == session {
-			list = append(list, p)
+func (a *App) userPrograms(c *ui.Context, k *colors, s *sys.Session, cols []column, totalMem float32) {
+	session := s.ID
+	q := strings.TrimSpace(a.query)
+	all := accountMatches(s, q)
+	for _, pi := range a.userOrder {
+		p := &a.sampler.Procs[pi]
+		if p.Session < session {
+			continue
 		}
-	}
-	slices.SortFunc(list, func(x, y *sys.Proc) int {
-		if x.CPU != y.CPU {
-			return -cmp3(x.CPU, y.CPU)
+		if p.Session > session {
+			break
 		}
-		return -cmp3(x.PrivateWS, y.PrivateWS)
-	})
-	for _, p := range list {
+		if !all && !detailMatches(p, q) {
+			continue
+		}
 		key := procKey(p)
 		sel := a.userProcSel == key
 		row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)

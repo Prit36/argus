@@ -7,6 +7,23 @@ chooser), Performance (CPU, memory, disks, network adapters and GPUs with
 60-second graphs), App history, Startup apps, Users, Details, Services
 and Settings, plus the tray CPU meter.
 
+## Quality of life
+
+- Clicking a Processes column sorts across Apps, Background and Windows
+  processes. Use View → Group by type to show category sections again.
+  Processes, Details, Services, Startup apps and App history remember their
+  sort column and direction between launches.
+- Search filters the current data page, including Startup apps, App history
+  and Users. Each page remembers its own search during the session. Escape
+  or the clear button removes the filter.
+- The title-bar pause button and Ctrl+P pause/resume updates at the previous
+  speed. F5 refreshes once while paused and reloads the current page's
+  services, startup entries, sessions or adapter addresses as applicable.
+- Ctrl+C or Copy row copies the selected process, service or startup entry
+  as tab-separated text. On Performance, Ctrl+C copies the machine summary.
+- Switching directly to a process's details or services clears the target
+  page's filter so the selection is visible.
+
 ## Build
 
 ```powershell
@@ -52,6 +69,12 @@ release build, steady state:
   GPU instead.
 - `GOGC=50` keeps the small, long-lived heap (~8 MB live) close to what's
   in use.
+- Collapsed process groups defer sorting their children until expanded.
+- Startup, history and user row ordering is cached between data/filter
+  changes instead of being rebuilt for mouse movement and other redraws.
+- While minimized or hidden, sampling slows to at most once every four
+  seconds. Restoring the window restores the chosen refresh interval;
+  paused updates stay paused. GPU counters are disabled while hidden.
 
 ## Files
 

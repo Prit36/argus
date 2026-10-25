@@ -71,7 +71,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.win.SetAlwaysOnTop(a.set.AlwaysOnTop)
 				}
 			})
-			a.toggleCard(c, k, room, "Group by type", "Show apps, background processes and Windows processes apart", &a.set.GroupByType, nil)
+			a.toggleCard(c, k, room, "Group by type", "Show process categories; clicking a column sorts across all categories", &a.set.GroupByType, nil)
 			section(c, k, "Window management", false)
 			a.toggleCard(c, k, room, "Minimize on use", "Minimize Task Manager after switching to an app", &a.set.MinimizeOnUse, nil)
 			a.toggleCard(c, k, room, "Hide when minimized", "Keep Task Manager in the notification area, not the taskbar, while minimized", &a.set.HideMinimized, nil)
@@ -87,6 +87,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 				})
 			}
 			section(c, k, "About", false)
+			a.card(c, k, room, "Keyboard shortcuts", "Ctrl+F: search  ·  Ctrl+P: pause or resume  ·  F5: refresh now  ·  Ctrl+C: copy selection  ·  Ctrl+1–8: switch pages", 0, func() {})
 			a.card(c, k, room, "Task Manager on mygo", "A native Windows 11 Task Manager in Go, drawn by mygo", 120, func() {
 				ui.Text(c, "mygo "+mygo.Version).FontSize(fontSmall).TextColor(k.secondary).NoWrap()
 			})

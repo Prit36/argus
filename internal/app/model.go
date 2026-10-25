@@ -255,7 +255,12 @@ func (m *Model) build(list []sys.Proc, o buildOptions) {
 		if q != "" {
 			g.len = int32(keep)
 		}
-		m.sortMembers(list, m.members[g.start:g.start+g.len], o, g.category)
+		// Collapsed groups only show aggregate figures; order their members
+		// when they become visible instead of sorting hidden rows every tick.
+		_, expanded := m.expanded[g.key]
+		if g.visible && (expanded || q != "") {
+			m.sortMembers(list, m.members[g.start:g.start+g.len], o, g.category)
+		}
 		if g.visible {
 			m.Counts[g.category]++
 		}
@@ -411,7 +416,7 @@ func isWindows(p *sys.Proc, windir string) bool {
 	if path == "" {
 		return p.Session == 0 && p.Info.Resolved
 	}
-	return len(path) >= len(windir) && strings.EqualFold(path[:len(windir)], windir)
+	return windir != "" && len(path) >= len(windir) && strings.EqualFold(path[:len(windir)], windir)
 }
 
 // isolation is what the Isolation column says of a process.
