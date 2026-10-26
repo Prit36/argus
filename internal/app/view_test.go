@@ -80,7 +80,11 @@ func TestPages(t *testing.T) {
 		}
 		snap(t, tt, "page-"+p.nav)
 	}
-	if !tt.HasText("Windows processes") {
+	// The last category can be below the virtualized viewport on machines
+	// with many background processes; verify it exists in the model.
+	if !slices.ContainsFunc(a.model.Rows, func(r Row) bool {
+		return r.Kind == RowHeader && r.Category == CatWindows
+	}) {
 		t.Error("no Windows processes group")
 	}
 	tt.SetDark(false)

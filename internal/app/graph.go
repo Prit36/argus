@@ -9,8 +9,8 @@ import (
 )
 
 // Task Manager's graphs: the last minute of a figure, newest at the right,
-// as a line over a lightly filled area, in a box edged in the figure's
-// color with a grid that scrolls left as samples come in.
+// as a thin line over a lightly filled area. Neutral grids and borders
+// keep the chart's structure separate from its series color.
 
 type series struct {
 	ring *sys.Ring
@@ -43,12 +43,15 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 		e.FillWidth()
 	}
 	bg := k.graphBG
-	gridColor := o.color.Alpha(0.16)
+	gridColor := ui.Hex("#e7e7e7")
 	fill := o.color.Alpha(0.14)
 	deep := o.color.Alpha(0.34)
-	edge := o.color.Alpha(0.75)
+	edge := ui.Hex("#a6a6a6")
 	if k.dark {
-		gridColor, fill, deep, edge = o.color.Alpha(0.22), o.color.Alpha(0.24), o.color.Alpha(0.5), o.color.Alpha(0.85)
+		gridColor, fill, deep, edge = ui.Hex("#2c2c2c"), o.color.Alpha(0.18), o.color.Alpha(0.4), ui.Hex("#757575")
+	}
+	if o.mini {
+		edge = o.color.Alpha(0.7)
 	}
 	// The series are copied: the drawing may run after the view returns.
 	var ringsBuf [2]series
@@ -60,12 +63,9 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 		}
 		p.Fill(r, bg, 0)
 		if o.grid && !o.mini {
-			// Ten rows (five on a short graph); columns six samples apart,
-			// moving with time.
+			// Ten utilization bands, including the logical-processor tiles;
+			// columns six samples apart, moving with time.
 			n := 10
-			if h < 100 {
-				n = 5
-			}
 			for i := 1; i < n; i++ {
 				y := r.Y + float32(math.Round(float64(h*float32(i)/float32(n)))) + 0.5
 				p.Line(r.X, y, r.X+w, y, 1, gridColor)
@@ -82,10 +82,7 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 			top = 1
 		}
 		dx := w / float32(sys.HistoryLen-1)
-		lineW := float32(1.4)
-		if o.mini {
-			lineW = 1.1
-		}
+		lineW := float32(1)
 		var pts [sys.HistoryLen][2]float32
 		for si, s := range rings {
 			n := 0

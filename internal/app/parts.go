@@ -195,7 +195,11 @@ func tableHeader(c *ui.Context, k *colors, cols []column, sorted int, ascending 
 func (a *App) tableList(c *ui.Context, key string, s *ui.ListState, n int, minW float32, header ui.Element, row func(ui.ListRow)) ui.Element {
 	c.SetTheme(a.listTheme)
 	list := ui.List(c.Key(key), s, n).Grow(1).MinHeight(0).FillWidth().RowWidth(minW)
-	list.Rows(row)
+	list.Rows(func(lr ui.ListRow) {
+		box := ui.Box(lr.Context).FillWidth()
+		selectionOutline(box, &a.k, lr.Selected())
+		box.Children(func() { row(lr) })
+	})
 	c.SetTheme(a.uiTheme)
 	if header.Valid() {
 		header.ScrollWith(list)
@@ -203,14 +207,28 @@ func (a *App) tableList(c *ui.Context, key string, s *ui.ListState, n int, minW 
 	return list
 }
 
-// heatCell is a figure's cell, its background as busy as share says.
-func heatCell(c *ui.Context, k *colors, col *column, text string, share float32, selected bool) {
-	e := cell(c, col)
+// Explorer's selection edge stays inside the row without shifting cells.
+func selectionOutline(e ui.Element, k *colors, selected bool) {
 	if selected {
-		e.Background(k.heatSelected)
-	} else {
-		e.Background(k.heat(share))
+		e.DrawOver(func(p *ui.Painter, r ui.Rect) {
+			p.Stroke(ui.Rect{X: r.X + 0.5, Y: r.Y + 0.5, W: max(0, r.W-1), H: max(0, r.H-1)}, k.selectionBorder, 0, 1)
+		})
 	}
+}
+
+// heatCell is a figure's cell, its background as busy as share says.
+func heatCell(c *ui.Context, k *colors, col *column, text string, share float32, selected, hovered bool) {
+	e := cell(c, col)
+	// Apply the same subtle overlay as the rest of the row. Compositing
+	// over each cell's heat preserves the blue usage scale during interaction.
+	bg := k.heat(share)
+	switch {
+	case selected:
+		bg = k.selectionOverlay.Over(bg)
+	case hovered:
+		bg = k.hoverOverlay.Over(bg)
+	}
+	e.Background(bg)
 	if text != "" {
 		e.Children(func() {
 			ui.Text(c, text).FontSize(fontCaption).TextColor(k.heatText).SingleLine()

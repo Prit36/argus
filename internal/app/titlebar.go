@@ -212,7 +212,7 @@ func (a *App) navPane(c *ui.Context, k *colors) {
 	w, _ := c.Size()
 	nw := a.navWidth(w)
 	wide := nw > 48
-	ui.Column(c).Width(nw).FillHeight().Padding(0, 4, 6, 4).Gap(4).Background(k.backdrop).Shrink(0).Children(func() {
+	ui.Column(c).Width(nw).FillHeight().Padding(0, 4, 6, 4).Gap(4).Background(k.page).Shrink(0).Children(func() {
 		b := ui.ButtonBase(c.Key("hamburger")).Size(40, 36).Radius(4).Tooltip("Toggle navigation").Shrink(0)
 		switch {
 		case b.Pressed():

@@ -87,6 +87,7 @@ func (a *App) processesPage(c *ui.Context, k *colors) {
 	s := &a.procList
 	s.Selected = &a.selIdx
 	s.Key = a.procRowKey
+	s.Header = a.procRowHeader
 	s.KeepOffset = true
 	s.Label = a.procRowLabel
 	if a.revealSel && a.selIdx >= 0 {
@@ -142,6 +143,10 @@ func (a *App) procRowKey(i int) any {
 	return i
 }
 
+func (a *App) procRowHeader(i int) bool {
+	return i < len(a.model.Rows) && a.model.Rows[i].Kind == RowHeader
+}
+
 func (a *App) procRowLabel(i int) string {
 	if i < len(a.model.Rows) {
 		return a.model.Rows[i].Title
@@ -190,6 +195,12 @@ func (a *App) processRow(c *ui.Context, k *colors, r *Row, shownList []ProcCol, 
 	}
 	p := &a.sampler.Procs[r.Proc]
 	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider)
+	hovered := row.Hovered()
+	if sel {
+		row.Background(k.rowSelected)
+	} else if hovered {
+		row.Background(k.rowHover)
+	}
 	row.ContextMenu(func(m *ui.Menu) {
 		a.selected = r.Key
 		a.processMenu(m)
@@ -249,19 +260,19 @@ func (a *App) processRow(c *ui.Context, k *colors, r *Row, shownList []ProcCol, 
 				}
 				textCell(c, cc, text, k.secondary)
 			case pcCPU:
-				heatCell(c, k, cc, r.cpuText, r.CPU/50, sel)
+				heatCell(c, k, cc, r.cpuText, r.CPU/50, sel, hovered)
 			case pcMemory:
-				heatCell(c, k, cc, r.memText, float32(r.Memory)/totalMem*4, sel)
+				heatCell(c, k, cc, r.memText, float32(r.Memory)/totalMem*4, sel, hovered)
 			case pcDisk:
-				heatCell(c, k, cc, r.diskText, r.Disk/(50<<20), sel)
+				heatCell(c, k, cc, r.diskText, r.Disk/(50<<20), sel, hovered)
 			case pcNetwork:
 				text := ""
 				if a.netmon.Available {
 					text = r.netText
 				}
-				heatCell(c, k, cc, text, r.Net*8/50e6, sel)
+				heatCell(c, k, cc, text, r.Net*8/50e6, sel, hovered)
 			case pcGPU:
-				heatCell(c, k, cc, r.gpuText, r.GPU/50, sel)
+				heatCell(c, k, cc, r.gpuText, r.GPU/50, sel, hovered)
 			case pcGPUEngine:
 				text := ""
 				if !group && p.GPU > 0 {

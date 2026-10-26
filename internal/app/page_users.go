@@ -127,10 +127,12 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 	sel := a.hasUserSel && a.userSel == s.ID && a.userProcSel == 0
 	id := s.ID
 	row := ui.ButtonBase(c).FillWidth().Height(rowH+6).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
+	selectionOutline(row, k, sel)
+	hovered := row.Hovered()
 	switch {
 	case sel:
 		row.Background(k.rowSelected)
-	case row.Hovered():
+	case hovered:
 		row.Background(k.rowHover)
 	}
 	if row.Clicked() {
@@ -171,14 +173,14 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 			status = "Disconnected"
 		}
 		textCell(c, &cols[1], status, k.secondary)
-		heatCell(c, k, &cols[2], cpuCell(sum.cpu), sum.cpu/50, sel)
-		heatCell(c, k, &cols[3], mbCell(sum.memory), float32(sum.memory)/totalMem*2, sel)
-		heatCell(c, k, &cols[4], diskCell(sum.disk), sum.disk/(50<<20), sel)
+		heatCell(c, k, &cols[2], cpuCell(sum.cpu), sum.cpu/50, sel, hovered)
+		heatCell(c, k, &cols[3], mbCell(sum.memory), float32(sum.memory)/totalMem*2, sel, hovered)
+		heatCell(c, k, &cols[4], diskCell(sum.disk), sum.disk/(50<<20), sel, hovered)
 		net := ""
 		if a.netmon.Available {
 			net = netCell(sum.net)
 		}
-		heatCell(c, k, &cols[5], net, sum.net*8/50e6, sel)
+		heatCell(c, k, &cols[5], net, sum.net*8/50e6, sel, hovered)
 	})
 }
 
@@ -201,10 +203,12 @@ func (a *App) userPrograms(c *ui.Context, k *colors, s *sys.Session, cols []colu
 		key := procKey(p)
 		sel := a.userProcSel == key
 		row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
+		selectionOutline(row, k, sel)
+		hovered := row.Hovered()
 		switch {
 		case sel:
 			row.Background(k.rowSelected)
-		case row.Hovered():
+		case hovered:
 			row.Background(k.rowHover)
 		}
 		if row.Clicked() {
@@ -228,14 +232,14 @@ func (a *App) userPrograms(c *ui.Context, k *colors, s *sys.Session, cols []colu
 			default:
 				textCell(c, &cols[1], "", k.secondary)
 			}
-			heatCell(c, k, &cols[2], cpuCell(p.CPU), p.CPU/50, sel)
-			heatCell(c, k, &cols[3], mbCell(p.PrivateWS), float32(p.PrivateWS)/totalMem*4, sel)
-			heatCell(c, k, &cols[4], diskCell(p.IO()), p.IO()/(50<<20), sel)
+			heatCell(c, k, &cols[2], cpuCell(p.CPU), p.CPU/50, sel, hovered)
+			heatCell(c, k, &cols[3], mbCell(p.PrivateWS), float32(p.PrivateWS)/totalMem*4, sel, hovered)
+			heatCell(c, k, &cols[4], diskCell(p.IO()), p.IO()/(50<<20), sel, hovered)
 			net := ""
 			if a.netmon.Available {
 				net = netCell(p.Net)
 			}
-			heatCell(c, k, &cols[5], net, p.Net*8/50e6, sel)
+			heatCell(c, k, &cols[5], net, p.Net*8/50e6, sel, hovered)
 		})
 	}
 }

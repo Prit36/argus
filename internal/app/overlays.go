@@ -272,19 +272,7 @@ func (a *App) detailColumnsMenu(m *ui.Menu) {
 
 // perfMenu is the Performance page's "…" and right-click menu.
 func (a *App) perfMenu(m *ui.Menu) {
-	cpu := a.perfTab.Kind == PerfCPU
-	if m.Item("Overall utilization").Checked(!a.set.CPULogical).Disabled(!cpu).Chosen() {
-		a.set.CPULogical = false
-		a.saveSettings()
-	}
-	if m.Item("Logical processors").Checked(a.set.CPULogical).Disabled(!cpu).Chosen() {
-		a.set.CPULogical = true
-		a.saveSettings()
-	}
-	if m.Item("Show kernel times").Checked(a.set.KernelTimes).Disabled(!cpu).Chosen() {
-		a.set.KernelTimes = !a.set.KernelTimes
-		a.saveSettings()
-	}
+	a.cpuViewMenu(m)
 	m.Separator()
 	if m.Item("Summary view").Checked(a.perfSummary).Chosen() {
 		a.perfSummary = !a.perfSummary
@@ -295,6 +283,22 @@ func (a *App) perfMenu(m *ui.Menu) {
 	m.Separator()
 	if m.Item("Open Resource Monitor").Chosen() {
 		open("resmon.exe")
+	}
+}
+
+func (a *App) cpuViewMenu(m *ui.Menu) {
+	cpu := a.perfTab.Kind == PerfCPU
+	if m.Item("Overall utilization").Checked(!a.set.CPULogical).Disabled(!cpu).Chosen() {
+		a.set.CPULogical = false
+		a.saveSettings()
+	}
+	if m.Item("Logical processors").Checked(a.set.CPULogical).Disabled(!cpu).Chosen() {
+		a.set.CPULogical = true
+		a.saveSettings()
+	}
+	if m.Item("Show kernel times").Checked(a.set.KernelTimes).Disabled(!cpu || a.set.CPULogical).Chosen() {
+		a.set.KernelTimes = !a.set.KernelTimes
+		a.saveSettings()
 	}
 }
 

@@ -15,7 +15,11 @@ import (
 
 func (a *App) performancePage(c *ui.Context, k *colors) {
 	pageHeader(c, k, "Performance", func() {
-		if commandButton(c, k, command{icon: icRun, label: "Run new task", enabled: true}) {
+		compact := a.narrowerThan(c, 820)
+		if a.perfTab.Kind == PerfCPU {
+			commandButton(c, k, command{icon: icView, label: "CPU view", enabled: true, compact: compact, menu: a.cpuViewMenu})
+		}
+		if commandButton(c, k, command{icon: icRun, label: "Run new task", enabled: true, compact: compact}) {
 			a.openRun()
 		}
 		commandButton(c, k, command{icon: icMore, enabled: true, menu: a.perfMenu})
@@ -194,16 +198,16 @@ func (a *App) cpuDetail(c *ui.Context, k *colors) {
 	if a.set.CPULogical && len(a.cores) > 1 {
 		// A graph per logical processor, in a grid.
 		n := len(a.cores)
-		cols := int(math.Ceil(math.Sqrt(float64(n) * 1.6)))
+		cols := logicalColumns(n)
 		rows := (n + cols - 1) / cols
 		cellH := float32(math.Round(float64(max(40, (gh-float32(rows-1)*4)/float32(rows)))))
 		ui.Column(c).FillWidth().Gap(4).Children(func() {
 			for i := 0; i < n; i += cols {
 				ui.Row(c).FillWidth().Gap(4).Children(func() {
 					for j := i; j < i+cols; j++ {
-						ui.Column(c.Key(j)).Grow(1).Basis(0).MinWidth(0).Children(func() {
+						ui.Column(c.Key(j)).Grow(1).Basis(0).MinWidth(0).Label("Logical processor " + itoa(j)).Children(func() {
 							if j < n {
-								graph(c, k, []series{{ring: &a.cores[j]}}, graphOptions{height: cellH, color: k.cpu, max: 100, samples: a.samples})
+								graph(c, k, []series{{ring: &a.cores[j]}}, graphOptions{height: cellH, color: k.cpu, max: 100, grid: true, samples: a.samples})
 							}
 						})
 					}
@@ -245,6 +249,22 @@ func (a *App) cpuDetail(c *ui.Context, k *colors) {
 		kv(c, k, "L2 cache:", fmtCache(info.L2))
 		kv(c, k, "L3 cache:", fmtCache(info.L3))
 	})
+}
+
+// Prefer a complete balanced rectangle (12 processors: 4 by 3), allowing
+// a partial last row for processor counts with no suitable factors.
+func logicalColumns(n int) int {
+	best := 1
+	target := math.Sqrt(float64(n) * 4 / 3)
+	for cols := 1; cols <= n; cols++ {
+		if n%cols == 0 && math.Abs(float64(cols)-target) < math.Abs(float64(best)-target) {
+			best = cols
+		}
+	}
+	if n/best > best*2 {
+		return int(math.Ceil(target))
+	}
+	return best
 }
 
 // compressedBytes is what the memory compression store holds: the

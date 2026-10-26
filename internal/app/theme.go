@@ -9,10 +9,8 @@ import (
 	"taskmgr/internal/winapi"
 )
 
-// Windows 11's Task Manager colors, light and dark: the window's backdrop
-// (Mica's gray), the page on it, text in three strengths, the accent the
-// user chose, the accent-tinted heat of busy cells, and each graph's color
-// (CPU blue, memory purple, disk green, network brown, GPU blue).
+// Neutral surfaces and interaction states follow File Explorer. Color is
+// reserved for usage heat, the Windows accent, status indicators and graphs.
 
 // Font sizes, in DIPs: the WinUI typographic ramp.
 const (
@@ -57,20 +55,22 @@ type colors struct {
 	dark bool
 	// backdrop is the title bar and the navigation pane; page the page, a
 	// layer above it.
-	backdrop, page, pageBorder ui.Color
-	card, cardBorder           ui.Color
-	field, fieldBorder         ui.Color
-	text, secondary, tertiary  ui.Color
-	accent, onAccent           ui.Color
-	hover, pressed             ui.Color
-	navSelected                ui.Color
-	rowHover, rowSelected      ui.Color
-	divider, cellDivider       ui.Color
-	// heatLow to heatHigh are busy cells, from barely to very.
-	heatLow, heatHigh, heatSelected, heatText ui.Color
-	closeHover, danger, success               ui.Color
-	cpu, memory, disk, network, gpu           ui.Color
-	graphBG                                   ui.Color
+	backdrop, page, pageBorder     ui.Color
+	card, cardBorder               ui.Color
+	field, fieldBorder             ui.Color
+	text, secondary, tertiary      ui.Color
+	accent, onAccent               ui.Color
+	hover, pressed                 ui.Color
+	navSelected                    ui.Color
+	rowHover, rowSelected          ui.Color
+	hoverOverlay, selectionOverlay ui.Color
+	selectionBorder                ui.Color
+	divider, cellDivider           ui.Color
+	// Resource intensity follows the reference's blue heat map.
+	heatLow, heatHigh, heatText     ui.Color
+	closeHover, danger, success     ui.Color
+	cpu, memory, disk, network, gpu ui.Color
+	graphBG                         ui.Color
 }
 
 var (
@@ -80,78 +80,82 @@ var (
 
 func palette(dark bool, ac accent) colors {
 	if dark {
-		page := ui.Hex("#272727")
+		page := ui.Hex("#191919")
 		k := colors{
-			dark:         true,
-			backdrop:     ui.Hex("#1f1f1f"),
-			page:         page,
-			pageBorder:   ui.Hex("#333333"),
-			card:         ui.Hex("#2d2d2d"),
-			cardBorder:   ui.Hex("#383838"),
-			field:        ui.Hex("#2b2b2b"),
-			fieldBorder:  ui.Hex("#404040"),
-			text:         ui.Hex("#ffffff"),
-			secondary:    ui.Hex("#c8c8c8"),
-			tertiary:     ui.Hex("#969696"),
-			accent:       ac.dark,
-			onAccent:     black,
-			hover:        white.Alpha(0.065),
-			pressed:      white.Alpha(0.04),
-			navSelected:  white.Alpha(0.08),
-			rowHover:     white.Alpha(0.055).Over(page),
-			rowSelected:  ac.dark.Alpha(0.20).Over(page),
-			divider:      white.Alpha(0.09),
-			cellDivider:  white.Alpha(0.09 * 0.35),
-			heatLow:      page.Mix(ac.light, 0.12),
-			heatHigh:     page.Mix(ac.light, 0.62),
-			heatSelected: ac.dark.Alpha(0.28).Over(page),
-			heatText:     ui.Hex("#ffffff"),
-			closeHover:   ui.Hex("#c42b1c"),
-			danger:       ui.Hex("#ff99a4"),
-			success:      ui.Hex("#6ccb5f"),
-			cpu:          ui.Hex("#4cc2ff"),
-			memory:       ui.Hex("#c58af9"),
-			disk:         ui.Hex("#6ccb5f"),
-			network:      ui.Hex("#f2a950"),
-			gpu:          ui.Hex("#4cc2ff"),
-			graphBG:      ui.Hex("#1f1f1f"),
+			dark:             true,
+			backdrop:         ui.Hex("#202020"),
+			page:             page,
+			pageBorder:       ui.Hex("#383838"),
+			card:             ui.Hex("#222222"),
+			cardBorder:       ui.Hex("#383838"),
+			field:            ui.Hex("#383838"),
+			fieldBorder:      ui.Hex("#606060"),
+			text:             ui.Hex("#f2f2f2"),
+			secondary:        ui.Hex("#cccccc"),
+			tertiary:         ui.Hex("#aaaaaa"),
+			accent:           ac.dark,
+			onAccent:         black,
+			hover:            white.Alpha(0.08),
+			pressed:          white.Alpha(0.12),
+			navSelected:      ui.Hex("#333333"),
+			rowHover:         white.Alpha(0.06).Over(page),
+			rowSelected:      white.Alpha(0.12).Over(page),
+			hoverOverlay:     white.Alpha(0.06),
+			selectionOverlay: white.Alpha(0.12),
+			selectionBorder:  ui.Hex("#686868"),
+			divider:          ui.Hex("#383838"),
+			cellDivider:      ui.Transparent,
+			heatLow:          ui.Hex("#11243e"),
+			heatHigh:         ui.Hex("#0a3d83"),
+			heatText:         ui.Hex("#f2f2f2"),
+			closeHover:       ui.Hex("#c42b1c"),
+			danger:           ui.Hex("#ff99a4"),
+			success:          ui.Hex("#6ccb5f"),
+			cpu:              ui.Hex("#39b8e3"),
+			memory:           ui.Hex("#c58af9"),
+			disk:             ui.Hex("#6ccb5f"),
+			network:          ui.Hex("#f2a950"),
+			gpu:              ui.Hex("#4cc2ff"),
+			graphBG:          page,
 		}
 		return k
 	}
-	page := ui.Hex("#fafafa")
+	page := ui.Hex("#ffffff")
 	return colors{
-		backdrop:     ui.Hex("#f3f3f3"),
-		page:         page,
-		pageBorder:   ui.Hex("#e5e5e5"),
-		card:         ui.Hex("#ffffff"),
-		cardBorder:   ui.Hex("#e6e6e6"),
-		field:        ui.Hex("#ffffff"),
-		fieldBorder:  ui.Hex("#d6d6d6"),
-		text:         ui.Hex("#1b1b1b"),
-		secondary:    ui.Hex("#5c5c5c"),
-		tertiary:     ui.Hex("#757575"),
-		accent:       ac.light,
-		onAccent:     white,
-		hover:        black.Alpha(0.045),
-		pressed:      black.Alpha(0.03),
-		navSelected:  black.Alpha(0.06),
-		rowHover:     black.Alpha(0.035).Over(page),
-		rowSelected:  ac.light.Alpha(0.14).Over(page),
-		divider:      black.Alpha(0.08),
-		cellDivider:  black.Alpha(0.08 * 0.35),
-		heatLow:      page.Mix(ac.light, 0.07),
-		heatHigh:     page.Mix(ac.light, 0.42),
-		heatSelected: ac.light.Alpha(0.24).Over(page),
-		heatText:     ui.Hex("#1b1b1b"),
-		closeHover:   ui.Hex("#c42b1c"),
-		danger:       ui.Hex("#c42b1c"),
-		success:      ui.Hex("#107c10"),
-		cpu:          ui.Hex("#0067c0"),
-		memory:       ui.Hex("#881798"),
-		disk:         ui.Hex("#107c10"),
-		network:      ui.Hex("#9a5006"),
-		gpu:          ui.Hex("#0067c0"),
-		graphBG:      ui.Hex("#ffffff"),
+		backdrop:         ui.Hex("#f3f3f3"),
+		page:             page,
+		pageBorder:       ui.Hex("#d5d5d5"),
+		card:             ui.Hex("#fafafa"),
+		cardBorder:       ui.Hex("#d9d9d9"),
+		field:            ui.Hex("#ffffff"),
+		fieldBorder:      ui.Hex("#b5b5b5"),
+		text:             ui.Hex("#1b1b1b"),
+		secondary:        ui.Hex("#525252"),
+		tertiary:         ui.Hex("#6b6b6b"),
+		accent:           ac.light,
+		onAccent:         white,
+		hover:            black.Alpha(0.045),
+		pressed:          black.Alpha(0.03),
+		navSelected:      ui.Hex("#e5e5e5"),
+		rowHover:         black.Alpha(0.04).Over(page),
+		rowSelected:      black.Alpha(0.08).Over(page),
+		hoverOverlay:     black.Alpha(0.04),
+		selectionOverlay: black.Alpha(0.08),
+		selectionBorder:  ui.Hex("#b3b3b3"),
+		divider:          ui.Hex("#dedede"),
+		cellDivider:      ui.Transparent,
+		heatLow:          page.Mix(ac.light, 0.07),
+		heatHigh:         page.Mix(ac.light, 0.42),
+		heatText:         ui.Hex("#1b1b1b"),
+		closeHover:       ui.Hex("#c42b1c"),
+		danger:           ui.Hex("#c42b1c"),
+		success:          ui.Hex("#107c10"),
+		cpu:              ui.Hex("#0067c0"),
+		memory:           ui.Hex("#881798"),
+		disk:             ui.Hex("#107c10"),
+		network:          ui.Hex("#9a5006"),
+		gpu:              ui.Hex("#0067c0"),
+		graphBG:          ui.Hex("#ffffff"),
 	}
 }
 
@@ -161,8 +165,8 @@ func uiTheme(k *colors) *ui.Theme {
 	var t ui.Theme
 	if k.dark {
 		t = *ui.DarkTheme()
-		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#2c2c2c"), ui.Hex("#383838"), ui.Hex("#333333")
-		t.Border = ui.Hex("#404040")
+		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#303030"), ui.Hex("#3b3b3b"), ui.Hex("#353535")
+		t.Border = ui.Hex("#606060")
 	} else {
 		t = *ui.LightTheme()
 		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#ffffff"), ui.Hex("#f2f2f2"), ui.Hex("#ececec")
