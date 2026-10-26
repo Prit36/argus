@@ -17,7 +17,7 @@ import (
 // network figures. A click shows the window (hidden there while
 // minimized, when Settings say so); a right click offers Show and Close.
 
-// trayIcons are the meter's PNGs, made once per level and size.
+// trayIcons are the meter's PNGs, made once per filled pixel row and size.
 var trayIcons = map[int][]byte{}
 
 // A PNG encoder otherwise allocates ~830 KB of compression scratch for
@@ -47,14 +47,14 @@ func (a *App) trayPx() int {
 
 // meter is the icon: a frame, filled from the bottom as busy as the CPU.
 func meter(px, level int) []byte {
-	key := px<<8 | level
+	key := meterKey(px, level)
 	if b, ok := trayIcons[key]; ok {
 		return b
 	}
 	img := image.NewNRGBA(image.Rect(0, 0, px, px))
 	inset := px / 8
 	left, right := inset, px-inset
-	fillTop := px - inset - int(math.Round(float64(px-2*inset-2)*float64(level)/100)) - 1
+	fillTop := px - inset - (key & 0xff) - 1
 	edge := color.NRGBA{0x8a, 0x8a, 0x8a, 0xff}
 	fill := color.NRGBA{0x2e, 0xb8, 0x2e, 0xff} // Task Manager's green
 	empty := color.NRGBA{0x1c, 0x1c, 0x1c, 0xff}
@@ -76,6 +76,11 @@ func meter(px, level int) []byte {
 	return b.Bytes()
 }
 
+func meterKey(px, level int) int {
+	fill := int(math.Round(float64(px-2*(px/8)-2) * float64(min(100, max(0, level))) / 100))
+	return px<<8 | fill
+}
+
 func (a *App) trayTip() string {
 	return "CPU: " + fmtPercent(a.sampler.CPU*100) +
 		"\nMemory: " + fmtPercent(a.mem.Load()*100) +
@@ -87,11 +92,12 @@ func (a *App) cpuLevel() int { return int(math.Round(float64(a.sampler.CPU * 100
 
 func (a *App) addTray() {
 	level := a.cpuLevel()
-	t, err := mygo.NewTray(mygo.TrayOptions{ID: "cpu", Icon: meter(a.trayPx(), level), ToolTip: a.trayTip()})
+	px, tip := a.trayPx(), a.trayTip()
+	t, err := mygo.NewTray(mygo.TrayOptions{ID: "cpu", Icon: meter(px, level), ToolTip: tip})
 	if err != nil {
 		return
 	}
-	a.tray, a.trayLevel = t, level
+	a.tray, a.trayKey, a.trayText = t, meterKey(px, level), tip
 	t.OnClick(a.showWindow)
 	t.OnRightClick(func() {
 		t.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
@@ -108,16 +114,20 @@ func (a *App) addTray() {
 	})
 }
 
-// updateTray redraws the meter (when its level changed) and the tooltip.
+// updateTray publishes only changes to the pixels, DPI size or tooltip.
 func (a *App) updateTray() {
 	if a.tray == nil {
 		return
 	}
-	if level := a.cpuLevel(); level != a.trayLevel {
-		a.trayLevel = level
-		a.tray.SetIcon(meter(a.trayPx(), level), false)
+	px, level := a.trayPx(), a.cpuLevel()
+	if key := meterKey(px, level); key != a.trayKey {
+		a.trayKey = key
+		a.tray.SetIcon(meter(px, level), false)
 	}
-	a.tray.SetToolTip(a.trayTip())
+	if tip := a.trayTip(); tip != a.trayText {
+		a.trayText = tip
+		a.tray.SetToolTip(tip)
+	}
 }
 
 // showWindow shows the window, restored and in front.

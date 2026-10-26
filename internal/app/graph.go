@@ -2,11 +2,16 @@ package app
 
 import (
 	"math"
+	"sync"
 
 	"github.com/egoist/mygo/ui"
 
 	"taskmgr/internal/sys"
 )
+
+// FillPath consumes its commands synchronously. Share scratch storage
+// across graphs and frames, without retaining one path per CPU tile.
+var graphPaths = sync.Pool{New: func() any { return new(ui.Path) }}
 
 // Task Manager's graphs: the last minute of a figure, newest at the right,
 // as a thin line over a lightly filled area. Neutral grids and borders
@@ -100,13 +105,13 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 			line := pts[:n]
 			switch {
 			case s.kernel:
-				p.FillPath(area(line, r.Y+h), deep)
+				fillArea(p, line, r.Y+h, deep)
 				p.StrokePolyline(line, 1, o.color.Alpha(0.8))
 			case s.dashed:
 				dashedPolyline(p, line, lineW, o.color)
 			default:
 				if si == 0 {
-					p.FillPath(area(line, r.Y+h), fill)
+					fillArea(p, line, r.Y+h, fill)
 				}
 				p.StrokePolyline(line, lineW, o.color)
 			}
@@ -116,16 +121,18 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 	})
 }
 
-// area is the region under a line, down to bottom.
-func area(line [][2]float32, bottom float32) *ui.Path {
-	var path ui.Path
+// fillArea fills the region under a line, down to bottom.
+func fillArea(p *ui.Painter, line [][2]float32, bottom float32, color ui.Color) {
+	path := graphPaths.Get().(*ui.Path)
+	path.Reset()
 	path.MoveTo(line[0][0], bottom)
 	for _, pt := range line {
 		path.LineTo(pt[0], pt[1])
 	}
 	path.LineTo(line[len(line)-1][0], bottom)
 	path.Close()
-	return &path
+	p.FillPath(path, color)
+	graphPaths.Put(path)
 }
 
 // dashedPolyline strokes line in dashes of 4 DIPs, 3 apart.

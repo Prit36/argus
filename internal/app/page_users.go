@@ -51,21 +51,39 @@ func (a *App) usersPage(c *ui.Context, k *colors) {
 		}
 	})
 	cols := userCols
-	tableHeader(c, k, cols[:], -1, true, compactHeaderH, 760, false, nil)
+	_, header := tableHeader(c, k, cols[:], -1, true, compactHeaderH, 760, false, nil)
 	totalMem := float32(max(1, a.mem.Total))
-	ui.Scroll(c.Key("users")).FillWidth().Grow(1).MinHeight(0).Children(func() {
-		for _, i := range a.userRows {
-			s := &a.sessions[i]
+	if len(a.userRows) == 0 && a.query != "" {
+		empty(c, k, noResults(a.query))
+		return
+	}
+	a.usersList.Key = a.userRowKey
+	a.usersList.KeepOffset = true
+	a.tableList(c, "users-table", &a.usersList, len(a.userDisplay), 760, header, func(lr ui.ListRow) {
+		i := a.userDisplay[lr.Index]
+		if i < 0 {
+			s := &a.sessions[-1-i]
 			sum := a.userSums[s.ID]
-			a.userRow(c.Key(s.ID), k, s, &sum, cols[:], totalMem)
-			if a.usersOpen[s.ID] || strings.TrimSpace(a.query) != "" {
-				a.userPrograms(c, k, s, cols[:], totalMem)
-			}
-		}
-		if len(a.userRows) == 0 && a.query != "" {
-			empty(c, k, noResults(a.query))
+			a.userRow(lr.Context, k, s, &sum, cols[:], totalMem)
+		} else {
+			a.userProgram(lr.Context, k, &a.sampler.Procs[i], cols[:], totalMem)
 		}
 	})
+}
+
+type userRowKey struct {
+	session uint32
+	process uint64
+	child   bool
+}
+
+func (a *App) userRowKey(i int) any {
+	r := a.userDisplay[i]
+	if r < 0 {
+		return userRowKey{session: a.sessions[-1-r].ID}
+	}
+	p := &a.sampler.Procs[r]
+	return userRowKey{session: p.Session, process: procKey(p), child: true}
 }
 
 func accountMatches(s *sys.Session, q string) bool {
@@ -104,6 +122,7 @@ func (a *App) buildUsers() {
 		return cmp3(p.PID, q.PID)
 	})
 	a.userRows = a.userRows[:0]
+	a.userDisplay = a.userDisplay[:0]
 	q := strings.TrimSpace(a.query)
 	for i := range a.sessions {
 		s := &a.sessions[i]
@@ -119,8 +138,30 @@ func (a *App) buildUsers() {
 		}
 		if match {
 			a.userRows = append(a.userRows, int32(i))
+			a.userDisplay = append(a.userDisplay, -1-int32(i))
+			if !a.usersOpen[s.ID] && q == "" {
+				continue
+			}
+			// Processes are already ordered by session, then activity.
+			start, _ := slices.BinarySearchFunc(a.userOrder, s.ID, func(pi int32, id uint32) int {
+				return cmp3(a.sampler.Procs[pi].Session, id)
+			})
+			for _, pi := range a.userOrder[start:] {
+				p := &a.sampler.Procs[pi]
+				if p.Session != s.ID {
+					break
+				}
+				if accountMatches(s, q) || detailMatches(p, q) {
+					a.userDisplay = append(a.userDisplay, pi)
+				}
+			}
 		}
 	}
+}
+
+func (a *App) toggleUser(id uint32) {
+	a.usersOpen[id] = !a.usersOpen[id]
+	a.dirty = true
 }
 
 func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, cols []column, totalMem float32) {
@@ -138,7 +179,7 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 	if row.Clicked() {
 		a.userSel, a.hasUserSel, a.userProcSel = id, true, 0
 		if row.DoubleClicked() {
-			a.usersOpen[id] = !a.usersOpen[id]
+			a.toggleUser(id)
 		}
 	}
 	row.ContextMenu(func(m *ui.Menu) {
@@ -152,7 +193,7 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 				o.Background(k.hover)
 			}
 			if o.Clicked() {
-				a.usersOpen[id] = !a.usersOpen[id]
+				a.toggleUser(id)
 			}
 			ic := icChevronRight
 			if a.usersOpen[id] || strings.TrimSpace(a.query) != "" {
@@ -184,64 +225,50 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 	})
 }
 
-// userPrograms are the user's processes, busiest first.
-func (a *App) userPrograms(c *ui.Context, k *colors, s *sys.Session, cols []column, totalMem float32) {
-	session := s.ID
-	q := strings.TrimSpace(a.query)
-	all := accountMatches(s, q)
-	for _, pi := range a.userOrder {
-		p := &a.sampler.Procs[pi]
-		if p.Session < session {
-			continue
-		}
-		if p.Session > session {
-			break
-		}
-		if !all && !detailMatches(p, q) {
-			continue
-		}
-		key := procKey(p)
-		sel := a.userProcSel == key
-		row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
-		selectionOutline(row, k, sel)
-		hovered := row.Hovered()
-		switch {
-		case sel:
-			row.Background(k.rowSelected)
-		case hovered:
-			row.Background(k.rowHover)
-		}
-		if row.Clicked() {
-			a.userSel, a.hasUserSel, a.userProcSel = session, true, key
-		}
-		row.ContextMenu(func(m *ui.Menu) {
-			a.userSel, a.hasUserSel, a.userProcSel = session, true, key
-			a.userProcMenu(m)
-		})
-		row.Children(func() {
-			// Under the user's name, past the chevron and the avatar.
-			cell(c, &cols[0]).Gap(8).PaddingStart(10 + 20 + 8).Children(func() {
-				a.exeIcon(c, p.Info.Exe)
-				ui.Text(c, p.Info.Title()).FontSize(fontCaption).TextColor(k.text).SingleLine()
-			})
-			switch {
-			case p.Hung:
-				textCell(c, &cols[1], "Not responding", k.danger)
-			case p.Suspended:
-				textCell(c, &cols[1], "Suspended", k.secondary)
-			default:
-				textCell(c, &cols[1], "", k.secondary)
-			}
-			heatCell(c, k, &cols[2], cpuCell(p.CPU), p.CPU/50, sel, hovered)
-			heatCell(c, k, &cols[3], mbCell(p.PrivateWS), float32(p.PrivateWS)/totalMem*4, sel, hovered)
-			heatCell(c, k, &cols[4], diskCell(p.IO()), p.IO()/(50<<20), sel, hovered)
-			net := ""
-			if a.netmon.Available {
-				net = netCell(p.Net)
-			}
-			heatCell(c, k, &cols[5], net, p.Net*8/50e6, sel, hovered)
-		})
+// userProgram draws one visible process under its account.
+func (a *App) userProgram(c *ui.Context, k *colors, p *sys.Proc, cols []column, totalMem float32) {
+	session := p.Session
+	key := procKey(p)
+	sel := a.userProcSel == key
+	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
+	selectionOutline(row, k, sel)
+	hovered := row.Hovered()
+	switch {
+	case sel:
+		row.Background(k.rowSelected)
+	case hovered:
+		row.Background(k.rowHover)
 	}
+	if row.Clicked() {
+		a.userSel, a.hasUserSel, a.userProcSel = session, true, key
+	}
+	row.ContextMenu(func(m *ui.Menu) {
+		a.userSel, a.hasUserSel, a.userProcSel = session, true, key
+		a.userProcMenu(m)
+	})
+	row.Children(func() {
+		// Under the user's name, past the chevron and the avatar.
+		cell(c, &cols[0]).Gap(8).PaddingStart(10 + 20 + 8).Children(func() {
+			a.exeIcon(c, p.Info.Exe)
+			ui.Text(c, p.Info.Title()).FontSize(fontCaption).TextColor(k.text).SingleLine()
+		})
+		switch {
+		case p.Hung:
+			textCell(c, &cols[1], "Not responding", k.danger)
+		case p.Suspended:
+			textCell(c, &cols[1], "Suspended", k.secondary)
+		default:
+			textCell(c, &cols[1], "", k.secondary)
+		}
+		heatCell(c, k, &cols[2], cpuCell(p.CPU), p.CPU/50, sel, hovered)
+		heatCell(c, k, &cols[3], mbCell(p.PrivateWS), float32(p.PrivateWS)/totalMem*4, sel, hovered)
+		heatCell(c, k, &cols[4], diskCell(p.IO()), p.IO()/(50<<20), sel, hovered)
+		net := ""
+		if a.netmon.Available {
+			net = netCell(p.Net)
+		}
+		heatCell(c, k, &cols[5], net, p.Net*8/50e6, sel, hovered)
+	})
 }
 
 // userProc is the selected program, under its user.

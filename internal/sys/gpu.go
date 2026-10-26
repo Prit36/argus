@@ -157,6 +157,7 @@ func (g *gpuCounters) stop() {
 	}
 	g.query, g.cPerf, g.cEngine, g.cDed, g.cShared = 0, 0, 0, 0, 0
 	g.baseline = false
+	g.buf = nil // Large wildcard-instance buffers are unused while disabled.
 }
 
 // sample collects once: a fresh reading, its map and slice its own.

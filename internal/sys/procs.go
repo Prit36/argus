@@ -2,6 +2,8 @@ package sys
 
 import (
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -310,15 +312,35 @@ func eachWindow(h windows.HWND, _ uintptr) uintptr {
 }
 
 func utf16Equal(a []uint16, s string) bool {
-	if len(a) != len(s) {
-		return false
-	}
-	for i := range a {
-		if a[i] != uint16(s[i]) {
+	i, j := 0, 0
+	for i < len(a) && j < len(s) {
+		if a[i] < utf8.RuneSelf && s[j] < utf8.RuneSelf {
+			if a[i] != uint16(s[j]) {
+				return false
+			}
+			i++
+			j++
+			continue
+		}
+		r := rune(a[i])
+		i++
+		if utf16.IsSurrogate(r) {
+			decoded := utf8.RuneError
+			if i < len(a) {
+				decoded = utf16.DecodeRune(r, rune(a[i]))
+				if decoded != utf8.RuneError {
+					i++
+				}
+			}
+			r = decoded
+		}
+		sr, size := utf8.DecodeRuneInString(s[j:])
+		j += size
+		if r != sr {
 			return false
 		}
 	}
-	return true
+	return i == len(a) && j == len(s)
 }
 
 // Sample takes a sample: every process and processor.
@@ -330,6 +352,7 @@ func (s *Sampler) Sample(now time.Time) {
 	if !ok {
 		return
 	}
+	oldProcs := s.Procs
 	s.Procs = s.Procs[:0]
 	s.Threads, s.Handles = 0, 0
 	var dt float64
@@ -346,6 +369,11 @@ func (s *Sampler) Sample(now time.Time) {
 		off += uintptr(sp.NextEntryOffset)
 	}
 	s.forget()
+	// The backing array is reused, but exited processes' Info (including
+	// command lines) must not stay reachable through its unused tail.
+	if len(s.Procs) < len(oldProcs) {
+		clear(oldProcs[len(s.Procs):])
+	}
 }
 
 func (s *Sampler) add(sp *winapi.SystemProcessInfo, total uint64, dt float64) {

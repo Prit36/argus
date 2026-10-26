@@ -1,6 +1,7 @@
 package sys
 
 import (
+	"container/list"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -25,11 +26,21 @@ type Exe struct {
 	Company     string
 }
 
-// ExeCache keeps every program file read, and the names of the accounts
-// processes run as. Safe for concurrent use.
+const maxExeMetadata = 1024
+
+type exeCacheEntry struct {
+	exe   *Exe
+	ready chan struct{} // non-nil while a worker reads the file
+	link  *list.Element
+}
+
+// ExeCache keeps recently read program files, and the names of the accounts
+// processes run as. Safe for concurrent use. Eviction leaves Exe values
+// already owned by live processes, startup items and history valid.
 type ExeCache struct {
 	mu    sync.Mutex
-	byKey map[string]*Exe
+	byKey map[string]*exeCacheEntry
+	lru   list.List
 	users map[string]string
 
 	devOnce sync.Once
@@ -41,26 +52,44 @@ type ExeCache struct {
 type device struct{ nt, dos string }
 
 func NewExeCache() *ExeCache {
-	return &ExeCache{byKey: make(map[string]*Exe, 256), users: make(map[string]string, 8)}
+	return &ExeCache{byKey: make(map[string]*exeCacheEntry, 256), users: make(map[string]string, 8)}
 }
 
 // Get returns the program at path, reading it the first time.
 func (c *ExeCache) Get(path string) *Exe {
+	return c.get(path, readVersion)
+}
+
+func (c *ExeCache) get(path string, load func(*Exe)) *Exe {
 	key := strings.ToLower(path)
 	c.mu.Lock()
-	e := c.byKey[key]
+	if entry := c.byKey[key]; entry != nil {
+		ready := entry.ready
+		if entry.link != nil {
+			c.lru.MoveToFront(entry.link)
+		}
+		c.mu.Unlock()
+		if ready != nil {
+			<-ready
+		}
+		return entry.exe
+	}
+	entry := &exeCacheEntry{ready: make(chan struct{})}
+	c.byKey[key] = entry
 	c.mu.Unlock()
-	if e != nil {
-		return e
-	}
-	e = &Exe{Path: path, Key: key, File: filepath.Base(key)}
-	readVersion(e)
+	// Share one version-resource read among processes of the same program.
+	e := &Exe{Path: path, Key: key, File: filepath.Base(key)}
+	load(e)
 	c.mu.Lock()
-	if old := c.byKey[key]; old != nil {
-		e = old
-	} else {
-		c.byKey[key] = e
+	entry.exe = e
+	entry.link = c.lru.PushFront(key)
+	for c.lru.Len() > maxExeMetadata {
+		oldest := c.lru.Back()
+		delete(c.byKey, oldest.Value.(string))
+		c.lru.Remove(oldest)
 	}
+	close(entry.ready)
+	entry.ready = nil
 	c.mu.Unlock()
 	return e
 }
@@ -70,7 +99,11 @@ func (c *ExeCache) Lookup(path string) *Exe {
 	key := strings.ToLower(path)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.byKey[key]
+	if entry := c.byKey[key]; entry != nil && entry.exe != nil {
+		c.lru.MoveToFront(entry.link)
+		return entry.exe
+	}
+	return nil
 }
 
 func readVersion(e *Exe) {

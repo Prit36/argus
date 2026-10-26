@@ -14,12 +14,16 @@ import (
 
 // Programs' icons, made only for rows that show, on a goroutine of its own
 // (the shell's icon extraction reads the file), at the screen's density.
-// Each is made once per program and size, and kept.
+// Recently visible icons are kept; a long session must not retain every
+// program ever seen in the process list or history.
+
+const maxExeIcons = 256
 
 type exeIcon struct {
 	bmp   *ui.Bitmap
 	px    int
 	state uint8 // 0 none, 1 asked for, 2 made (bmp nil if it has none)
+	used  uint64
 }
 
 type iconJob struct {
@@ -34,6 +38,7 @@ type iconResult struct {
 
 type iconCache struct {
 	byExe    map[*sys.Exe]*exeIcon
+	clock    uint64
 	generic  exeIcon
 	jobs     chan iconJob
 	stop     chan struct{}
@@ -43,6 +48,28 @@ type iconCache struct {
 	results  []iconResult
 	notified atomic.Bool
 	notify   func()
+}
+
+// get keeps the most recently drawn icons. Called only by the UI thread.
+func (ic *iconCache) get(exe *sys.Exe) *exeIcon {
+	ic.clock++
+	e := ic.byExe[exe]
+	if e == nil {
+		if len(ic.byExe) >= maxExeIcons {
+			var oldest *sys.Exe
+			used := ^uint64(0)
+			for key, icon := range ic.byExe {
+				if icon.used < used {
+					oldest, used = key, icon.used
+				}
+			}
+			delete(ic.byExe, oldest)
+		}
+		e = &exeIcon{}
+		ic.byExe[exe] = e
+	}
+	e.used = ic.clock
+	return e
 }
 
 func (ic *iconCache) init(notify func()) {
@@ -139,11 +166,7 @@ func (a *App) exeIcon(c *ui.Context, exe *sys.Exe) {
 	px := a.iconPx()
 	ic := &a.icons
 	if exe != nil {
-		e := ic.byExe[exe]
-		if e == nil {
-			e = &exeIcon{}
-			ic.byExe[exe] = e
-		}
+		e := ic.get(exe)
 		if e.px != px || e.state == 0 {
 			ic.ask(e, exe, px)
 		}

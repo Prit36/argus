@@ -154,6 +154,7 @@ type App struct {
 	gpuPerPID map[uint32]sys.ProcGPU
 
 	services      *sys.Services
+	serviceReader sys.ServiceReader
 	serviceGroups sys.ServiceGroups
 	servicesAt    time.Time
 	servicesBusy  bool
@@ -241,6 +242,8 @@ type App struct {
 	usersOpen    map[uint32]bool
 	userRows     []int32
 	userOrder    []int32
+	userDisplay  []int32 // negative: -1-session index; otherwise process index
+	usersList    ui.ListState
 	userSums     map[uint32]userSum
 	historySort  uint8
 	historyAsc   bool
@@ -269,7 +272,8 @@ type App struct {
 	scale     float32
 	dumpState atomic.Uint32
 	dumpWhere string
-	trayLevel int
+	trayKey   int
+	trayText  string
 	pendingUI atomic.Bool
 }
 
@@ -309,7 +313,7 @@ func newAppState() *App {
 		startupIdx:    -1,
 		active:        true,
 		scale:         1,
-		trayLevel:     -1,
+		trayKey:       -1,
 	}
 	a.resolver = sys.NewResolver(a.exes, 4)
 	a.resolver.Notify = a.resolvedNotify
@@ -439,7 +443,12 @@ func (a *App) sample() {
 		a.refreshSessions(5 * time.Second)
 	}
 	a.checkEfficiency()
-	a.dirty = true
+	// Startup and service rows depend on their own snapshots, not process
+	// counters. Their loaders invalidate them when those snapshots change.
+	switch a.page {
+	case PageProcesses, PageDetails, PageUsers, PageAppHistory:
+		a.dirty = true
+	}
 }
 
 // needGPU reports whether the GPU counters are wanted: the Performance
@@ -591,11 +600,14 @@ func (a *App) refreshServices(every time.Duration) {
 	a.servicesBusy = true
 	groups := a.serviceGroups
 	go func() {
-		list := sys.ReadServices(groups)
+		list := a.serviceReader.Read(groups)
 		a.post(func() {
 			a.servicesBusy = false
 			a.servicesAt = time.Now()
 			if list != nil {
+				if list == a.services {
+					return // Same immutable snapshot; cached rows remain valid.
+				}
 				a.services = list
 			}
 			a.dirty = true
@@ -770,6 +782,8 @@ func (a *App) refreshRows() {
 				list = &a.servicesList
 			case PageStartup:
 				list = &a.startupList
+			case PageUsers:
+				list = &a.usersList
 			case PageAppHistory:
 				list = &a.historyList
 			}

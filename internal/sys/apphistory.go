@@ -2,11 +2,11 @@ package sys
 
 import (
 	"bufio"
-	"bytes"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,16 +30,16 @@ type History struct {
 	path  string
 	List  []HistoryEntry
 	index map[string]int
-	byExe map[*Exe]int
 	// Since is when counting started, as a FILETIME.
 	Since   uint64
 	changed bool
 	saved   time.Time
+	writes  historyWriter
 }
 
 // LoadHistory reads the history kept in dir.
 func LoadHistory(dir string) *History {
-	h := &History{path: filepath.Join(dir, "history.tsv"), index: map[string]int{}, byExe: map[*Exe]int{}}
+	h := &History{path: filepath.Join(dir, "history.tsv"), index: map[string]int{}}
 	h.load()
 	if h.Since == 0 {
 		h.Since = filetimeNow()
@@ -72,9 +72,6 @@ func (h *History) Add(procs []Proc, session uint32) {
 }
 
 func (h *History) entry(e *Exe) *HistoryEntry {
-	if i, ok := h.byExe[e]; ok {
-		return &h.List[i]
-	}
 	i, ok := h.index[e.Key]
 	if !ok {
 		title := e.Description
@@ -85,16 +82,15 @@ func (h *History) entry(e *Exe) *HistoryEntry {
 		i = len(h.List) - 1
 		h.index[e.Key] = i
 	}
-	h.byExe[e] = i
 	h.List[i].Exe = e
 	return &h.List[i]
 }
 
 // Clear forgets it all and counts from now ("Delete usage history").
 func (h *History) Clear() {
+	clear(h.List)
 	h.List = h.List[:0]
 	clear(h.index)
-	clear(h.byExe)
 	h.Since = filetimeNow()
 	h.changed = true
 	h.Save()
@@ -113,14 +109,49 @@ func (h *History) SaveEvery(now time.Time) {
 // of its own, so a slow disk can't hold up the window.
 func (h *History) Save() {
 	h.changed = false
-	data, path := h.encode(), h.path
-	go writeFile(path, data)
+	h.writes.save(h.path, h.encode())
 }
 
 // SaveNow writes the file before returning: when the program ends.
 func (h *History) SaveNow() {
 	h.changed = false
-	writeFile(h.path, h.encode())
+	<-h.writes.save(h.path, h.encode())
+}
+
+// Keep one disk write in flight and at most one pending snapshot. A newer
+// save replaces the pending data; the final save waits behind older writes
+// so they cannot overwrite it during shutdown or after clearing history.
+type historyWriter struct {
+	mu      sync.Mutex
+	pending []byte
+	done    chan struct{}
+}
+
+func (w *historyWriter) save(path string, data []byte) <-chan struct{} {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pending = data
+	if w.done == nil {
+		w.done = make(chan struct{})
+		go w.run(path, writeFile)
+	}
+	return w.done
+}
+
+func (w *historyWriter) run(path string, write func(string, []byte)) {
+	for {
+		w.mu.Lock()
+		data := w.pending
+		w.pending = nil
+		if data == nil {
+			close(w.done)
+			w.done = nil
+			w.mu.Unlock()
+			return
+		}
+		w.mu.Unlock()
+		write(path, data)
+	}
 }
 
 func writeFile(path string, data []byte) {
@@ -129,53 +160,75 @@ func writeFile(path string, data []byte) {
 }
 
 func (h *History) encode() []byte {
-	var b bytes.Buffer
-	b.WriteString("since\t")
-	b.WriteString(strconv.FormatUint(h.Since, 10))
-	b.WriteString("\r\n")
-	for _, e := range h.List {
-		b.WriteString(strconv.FormatUint(e.CPU, 10))
-		b.WriteByte('\t')
-		b.WriteString(strconv.FormatUint(e.Net, 10))
-		if e.App {
-			b.WriteString("\t1\t")
-		} else {
-			b.WriteString("\t0\t")
-		}
-		b.WriteString(e.Path)
-		b.WriteByte('\t')
-		b.WriteString(e.Title)
-		b.WriteString("\r\n")
+	// Reserve for both 20-digit counters, separators and the existing text.
+	// Append numbers directly instead of allocating strings per entry.
+	size := 28
+	for i := range h.List {
+		e := &h.List[i]
+		size += len(e.Path) + len(e.Title) + 47
 	}
-	return b.Bytes()
+	b := make([]byte, 0, size)
+	b = append(b, "since\t"...)
+	b = strconv.AppendUint(b, h.Since, 10)
+	b = append(b, '\r', '\n')
+	for _, e := range h.List {
+		b = strconv.AppendUint(b, e.CPU, 10)
+		b = append(b, '\t')
+		b = strconv.AppendUint(b, e.Net, 10)
+		if e.App {
+			b = append(b, '\t', '1', '\t')
+		} else {
+			b = append(b, '\t', '0', '\t')
+		}
+		b = append(b, e.Path...)
+		b = append(b, '\t')
+		b = append(b, e.Title...)
+		b = append(b, '\r', '\n')
+	}
+	return b
 }
 
 func (h *History) load() {
-	data, err := os.ReadFile(h.path)
+	f, err := os.Open(h.path)
 	if err != nil {
 		return
 	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
+	defer f.Close()
+	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 4096), 1<<20)
 	for sc.Scan() {
-		cols := strings.Split(strings.TrimRight(sc.Text(), "\r"), "\t")
-		if len(cols) >= 2 && cols[0] == "since" {
-			h.Since, _ = strconv.ParseUint(cols[1], 10, 64)
+		first, rest, ok := strings.Cut(strings.TrimRight(sc.Text(), "\r"), "\t")
+		if !ok {
 			continue
 		}
-		if len(cols) < 5 {
+		if first == "since" {
+			value, _, _ := strings.Cut(rest, "\t")
+			h.Since, _ = strconv.ParseUint(value, 10, 64)
 			continue
 		}
-		cpu, err1 := strconv.ParseUint(cols[0], 10, 64)
-		net, err2 := strconv.ParseUint(cols[1], 10, 64)
-		if err1 != nil || err2 != nil || cols[3] == "" || len(cols[3]) > 1024 {
+		netText, rest, ok := strings.Cut(rest, "\t")
+		if !ok {
 			continue
 		}
-		key := strings.ToLower(cols[3])
+		app, rest, ok := strings.Cut(rest, "\t")
+		if !ok {
+			continue
+		}
+		path, title, ok := strings.Cut(rest, "\t")
+		if !ok {
+			continue
+		}
+		title, _, _ = strings.Cut(title, "\t")
+		cpu, err1 := strconv.ParseUint(first, 10, 64)
+		net, err2 := strconv.ParseUint(netText, 10, 64)
+		if err1 != nil || err2 != nil || path == "" || len(path) > 1024 {
+			continue
+		}
+		key := strings.ToLower(path)
 		if _, ok := h.index[key]; ok {
 			continue
 		}
-		h.List = append(h.List, HistoryEntry{Key: key, Path: cols[3], Title: cols[4], CPU: cpu, Net: net, App: cols[2] == "1"})
+		h.List = append(h.List, HistoryEntry{Key: key, Path: path, Title: title, CPU: cpu, Net: net, App: app == "1"})
 		h.index[key] = len(h.List) - 1
 	}
 }

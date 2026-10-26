@@ -179,12 +179,16 @@ func procKey(p *sys.Proc) uint64 {
 }
 
 func (m *Model) build(list []sys.Proc, o buildOptions) {
+	oldRows, oldGroups := m.Rows, m.groups
 	m.Rows = m.Rows[:0]
 	m.members = m.members[:0]
 	m.groups = m.groups[:0]
 	clear(m.groupAt)
 	clear(m.byPID)
 	m.Counts = [3]int{}
+	if len(list) < len(m.titles) {
+		clear(m.titles[len(list):])
+	}
 	m.titles = slices.Grow(m.titles[:0], len(list))[:len(list)]
 	m.of = slices.Grow(m.of[:0], len(list))[:len(list)]
 	for i := range list {
@@ -206,6 +210,12 @@ func (m *Model) build(list []sys.Proc, o buildOptions) {
 		}
 		m.of[i] = gi
 		m.groups[gi].len++
+	}
+	// Forget expansion state when a process group exits.
+	for key := range m.expanded {
+		if _, live := m.groupAt[key]; !live {
+			delete(m.expanded, key)
+		}
 	}
 	// Members together, group by group.
 	var at int32
@@ -287,6 +297,13 @@ func (m *Model) build(list []sys.Proc, o buildOptions) {
 				m.emit(list, g, searching)
 			}
 		}
+	}
+	// Reused backing arrays must not keep exited programs' text alive.
+	if len(m.Rows) < len(oldRows) {
+		clear(oldRows[len(m.Rows):])
+	}
+	if len(m.groups) < len(oldGroups) {
+		clear(oldGroups[len(m.groups):])
 	}
 }
 

@@ -86,42 +86,91 @@ func (s *Services) FirstIn(pid uint32) *Service {
 // ImagePath. Used by one listing at a time.
 type ServiceGroups map[string]string
 
+// ServiceReader reuses the enumeration buffer and unchanged strings.
+// Read is called by one worker at a time; published Services stay immutable.
+type ServiceReader struct {
+	buf      []uint64
+	previous *Services
+}
+
 // ReadServices lists the services through the Service Control Manager.
 func ReadServices(groups ServiceGroups) *Services {
+	return new(ServiceReader).Read(groups)
+}
+
+func (r *ServiceReader) Read(groups ServiceGroups) *Services {
 	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_ENUMERATE_SERVICE|windows.SC_MANAGER_CONNECT)
 	if err != nil {
 		return nil
 	}
 	defer windows.CloseServiceHandle(scm)
-	var buf []uint64
 	var needed, count, resume uint32
 	for {
 		var p *byte
-		if len(buf) > 0 {
-			p = (*byte)(unsafe.Pointer(&buf[0]))
+		if len(r.buf) > 0 {
+			p = (*byte)(unsafe.Pointer(&r.buf[0]))
 		}
-		err := windows.EnumServicesStatusEx(scm, windows.SC_ENUM_PROCESS_INFO, windows.SERVICE_WIN32, windows.SERVICE_STATE_ALL, p, uint32(len(buf)*8), &needed, &count, &resume, nil)
+		err := windows.EnumServicesStatusEx(scm, windows.SC_ENUM_PROCESS_INFO, windows.SERVICE_WIN32, windows.SERVICE_STATE_ALL, p, uint32(len(r.buf)*8), &needed, &count, &resume, nil)
 		if err == nil {
 			break
 		}
 		if err != windows.ERROR_MORE_DATA || needed == 0 {
 			return nil
 		}
-		buf = make([]uint64, (needed+4096)/8+1)
+		r.buf = make([]uint64, (needed+4096)/8+1)
 		resume = 0
 	}
-	out := &Services{List: make([]Service, 0, count), byPID: make(map[uint32]pidServices, 128)}
 	if count == 0 {
+		if r.previous != nil && len(r.previous.List) == 0 {
+			return r.previous
+		}
+		out := &Services{}
+		r.previous = out
 		return out
 	}
-	items := unsafe.Slice((*windows.ENUM_SERVICE_STATUS_PROCESS)(unsafe.Pointer(&buf[0])), count)
+	items := unsafe.Slice((*windows.ENUM_SERVICE_STATUS_PROCESS)(unsafe.Pointer(&r.buf[0])), count)
+	return r.snapshot(items, groups)
+}
+
+func utf16PointerSlice(p *uint16) []uint16 {
+	if p == nil {
+		return nil
+	}
+	n := 0
+	for *(*uint16)(unsafe.Add(unsafe.Pointer(p), n*2)) != 0 {
+		n++
+	}
+	return unsafe.Slice(p, n)
+}
+
+func (r *ServiceReader) snapshot(items []windows.ENUM_SERVICE_STATUS_PROCESS, groups ServiceGroups) *Services {
+	previous := r.previous
+	unchanged := previous != nil && len(previous.List) == len(items)
+	if unchanged {
+		for i := range items {
+			it, old := &items[i], &previous.List[i]
+			if it.ServiceStatusProcess.ProcessId != old.PID || ServiceState(it.ServiceStatusProcess.CurrentState) != old.State ||
+				!utf16Equal(utf16PointerSlice(it.ServiceName), old.Name) || !utf16Equal(utf16PointerSlice(it.DisplayName), old.Display) {
+				unchanged = false
+				break
+			}
+		}
+	}
+	if unchanged {
+		return previous
+	}
+	out := &Services{List: make([]Service, 0, len(items)), byPID: make(map[uint32]pidServices, 128)}
 	for i := range items {
 		it := &items[i]
-		name := windows.UTF16PtrToString(it.ServiceName)
+		var old Service
+		if previous != nil && i < len(previous.List) {
+			old = previous.List[i]
+		}
+		name := utf16Cached(old.Name, utf16PointerSlice(it.ServiceName))
 		pid := it.ServiceStatusProcess.ProcessId
 		out.List = append(out.List, Service{
 			Name:    name,
-			Display: windows.UTF16PtrToString(it.DisplayName),
+			Display: utf16Cached(old.Display, utf16PointerSlice(it.DisplayName)),
 			PID:     pid,
 			State:   ServiceState(it.ServiceStatusProcess.CurrentState),
 			Group:   groups.of(name),
@@ -135,6 +184,7 @@ func ReadServices(groups ServiceGroups) *Services {
 			out.byPID[pid] = e
 		}
 	}
+	r.previous = out
 	return out
 }
 
