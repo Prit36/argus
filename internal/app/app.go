@@ -124,7 +124,9 @@ type PerfTab struct {
 
 // App is the task manager's state.
 type App struct {
-	win *mygo.Window
+	hardware      *hardwareLoad
+	hardwareReady bool
+	win           *mygo.Window
 	// The window as goroutines see it, and what they posted before it
 	// was made (the first sample runs while mygo starts).
 	posted  atomic.Pointer[mygo.Window]
@@ -177,6 +179,8 @@ type App struct {
 	resumeSpeed Speed
 	timerGen    uint64
 	timerOn     bool
+	timer       *time.Timer
+	warmTimer   *time.Timer
 	// windir is the Windows folder, lower-cased with its trailing slash.
 	windir string
 
@@ -278,10 +282,16 @@ const (
 )
 
 func newApp() *App {
+	a := newAppState()
+	a.applyHardware(readHardware())
+	return a
+}
+
+func newAppState() *App {
 	a := &App{
 		exes:          sys.NewExeCache(),
-		cpuInfo:       sys.ReadCPU(),
-		memHW:         sys.ReadMemoryHardware(),
+		disks:         &sys.Disks{},
+		net:           &sys.Net{},
 		serviceGroups: sys.ServiceGroups{},
 		netBytes:      map[uint32]uint64{},
 		model:         newModel(),
@@ -304,9 +314,6 @@ func newApp() *App {
 	a.resolver = sys.NewResolver(a.exes, 4)
 	a.resolver.Notify = a.resolvedNotify
 	a.sampler = sys.NewSampler(a.exes, a.resolver)
-	a.disks = sys.FindDisks()
-	a.net = sys.FindNet()
-	a.gpus = sys.FindGPUs()
 	a.history = sys.LoadHistory(dataDir())
 	if dir, err := windows.GetSystemWindowsDirectory(); err == nil {
 		a.windir = strings.ToLower(dir)
@@ -332,7 +339,7 @@ func newApp() *App {
 		a.resumeSpeed = a.set.Speed
 	}
 	windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &a.session)
-	a.icons.init()
+	a.icons.init(a.resolvedNotify)
 	return a
 }
 
@@ -368,12 +375,20 @@ func (a *App) opened(win *mygo.Window) {
 	}
 }
 
-// resolvedNotify runs on a resolver goroutine when processes were resolved.
+// resolvedNotify coalesces notifications from resolver and icon workers.
 func (a *App) resolvedNotify() {
-	a.post(func() {
-		if a.sampler.ApplyResolved() {
-			a.dirty = true
-		}
+	// Names and shell icons often finish in a burst. Publish at most once
+	// per display interval instead of rebuilding the table per result.
+	if !a.pendingUI.CompareAndSwap(false, true) {
+		return
+	}
+	time.AfterFunc(time.Second/60, func() {
+		a.post(func() {
+			a.pendingUI.Store(false)
+			if a.sampler.ApplyResolved() {
+				a.dirty = true
+			}
+		})
 	})
 }
 
@@ -443,6 +458,9 @@ func (a *App) needGPU() bool {
 // with sample, it asks for a fresh collection.
 func (a *App) syncPerformance(sample bool) {
 	if a.closed {
+		return
+	}
+	if a.hardware != nil && !a.hardwareReady {
 		return
 	}
 	enabled := a.needGPU() && a.shown()
@@ -516,6 +534,9 @@ func (a *App) mergeGPU() {
 }
 
 func (a *App) requestAddresses() {
+	if a.hardware != nil && !a.hardwareReady {
+		return
+	}
 	if a.perf == nil {
 		a.perf = sys.NewPerfWorker(a.gpus, a.deliverPerformance)
 	}
@@ -639,7 +660,16 @@ func (a *App) startTimer() {
 	a.timerOn = true
 	a.timerGen++
 	gen := a.timerGen
-	time.AfterFunc(d, func() { a.post(func() { a.onTimer(gen) }) })
+	a.timer = time.AfterFunc(d, func() { a.post(func() { a.onTimer(gen) }) })
+}
+
+func (a *App) stopTimer() {
+	if a.timer != nil {
+		a.timer.Stop()
+		a.timer = nil
+	}
+	a.timerOn = false
+	a.timerGen++
 }
 
 func (a *App) onTimer(gen uint64) {
@@ -647,6 +677,7 @@ func (a *App) onTimer(gen uint64) {
 		return
 	}
 	a.timerOn = false
+	a.timer = nil
 	if a.set.Speed == SpeedPaused {
 		return
 	}
@@ -664,8 +695,7 @@ func (a *App) setSpeed(s Speed) {
 		a.resumeSpeed = s
 	}
 	// The next tick comes at the new speed.
-	a.timerOn = false
-	a.timerGen++
+	a.stopTimer()
 	a.startTimer()
 	a.saveSettings()
 }
@@ -986,6 +1016,15 @@ func (a *App) toast(kind, text string) {
 // shutdown runs as the window closes.
 func (a *App) shutdown() {
 	a.closed = true
+	a.stopTimer()
+	if a.warmTimer != nil {
+		a.warmTimer.Stop()
+	}
+	if a.hardware != nil {
+		a.hardware.close()
+	}
+	a.resolver.Close()
+	a.icons.close()
 	a.saveSettings()
 	if a.perf != nil {
 		a.perf.Close()

@@ -22,10 +22,8 @@ var appIcon []byte
 
 // Run opens the task manager's window and runs until it closes.
 //
-// The machine is read while mygo starts: the first sample, and the names
-// of the processes in it, are ready when the window draws its first frame.
-// A second sample follows soon (rates need two), then one at each tick of
-// the update speed.
+// The first process sample runs while mygo starts. Descriptions and hardware
+// discovery continue in the background without delaying the first frame.
 func Run() error {
 	// The heap is small and long-lived: collect when it grows by half
 	// rather than doubles, to keep the working set close to what's live.
@@ -48,12 +46,16 @@ func Run() error {
 	}
 	ready := make(chan *App, 1)
 	go func() {
-		a := newApp()
+		a := newAppState()
+		a.hardware = &hardwareLoad{}
 		a.netmon.Start()
 		a.sample()
-		a.sampler.WaitResolved(400 * time.Millisecond)
 		a.dirty = true
 		ready <- a
+		h := readHardware()
+		if a.hardware.publish(h) {
+			a.post(a.takeHardware)
+		}
 	}()
 	var a *App
 	mygo.App.WhenReady(func() {
@@ -118,10 +120,19 @@ func (a *App) start() {
 		HideWindowButtons: true,
 		AlwaysOnTop:       a.set.AlwaysOnTop,
 		BackgroundColor:   "light-dark(#f3f3f3, #1f1f1f)",
-		Hidden:            background,
+		Hidden:            true,
 		Content:           ui.View(a.view),
 	})
 	a.win = win
+	win.OnReadyToShow(func() {
+		win.SetOpacity(1)
+		if background {
+			win.ShowInactive()
+			a.active = false
+		} else {
+			win.Show()
+		}
+	})
 	a.hwnd = windows.HWND(win.NativeHandle())
 	if !savedState() {
 		// Once the window has its frame.
@@ -129,19 +140,13 @@ func (a *App) start() {
 	}
 	win.SetIcon(appIcon)
 	a.maximized = win.IsMaximized()
-	a.icons.notify = func() { a.post(func() {}) }
-	if background {
-		win.ShowInactive()
-		a.active = false
-	}
 	win.OnFocus(func() { a.active = true; win.Invalidate() })
 	win.OnBlur(func() { a.active = false; win.Invalidate() })
 	sync := func() {
 		a.maximized = win.IsMaximized()
 		a.dirty = true
 		a.syncPerformance(false)
-		a.timerOn = false
-		a.timerGen++
+		a.stopTimer()
 		a.startTimer()
 		win.Invalidate()
 	}
@@ -155,8 +160,7 @@ func (a *App) start() {
 			win.Hide()
 		}
 		a.syncPerformance(false)
-		a.timerOn = false
-		a.timerGen++
+		a.stopTimer()
 		a.startTimer()
 	})
 	win.OnClose(func(*mygo.CloseEvent) {
@@ -189,9 +193,19 @@ func (a *App) start() {
 		a.goTo(Page(n))
 	}
 	a.syncPerformance(true)
+	// Windows doesn't send WM_PAINT to a hidden native surface. Let it
+	// paint without exposing the empty client area or taking focus, then
+	// reveal the completed frame in OnReadyToShow. Opacity 1 removes the
+	// temporary layered-window style, so normal rendering has no extra cost.
+	win.SetOpacity(0)
+	win.ShowInactive()
 	// The first figures that are rates need a second sample: soon.
-	time.AfterFunc(300*time.Millisecond, func() {
+	a.warmTimer = time.AfterFunc(300*time.Millisecond, func() {
 		a.post(func() {
+			a.warmTimer = nil
+			if a.set.Speed == SpeedPaused {
+				return
+			}
 			a.sample()
 			a.updateTray()
 			a.startTimer()

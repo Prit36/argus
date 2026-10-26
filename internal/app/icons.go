@@ -33,9 +33,11 @@ type iconResult struct {
 }
 
 type iconCache struct {
-	byExe   map[*sys.Exe]*exeIcon
-	generic exeIcon
-	jobs    chan iconJob
+	byExe    map[*sys.Exe]*exeIcon
+	generic  exeIcon
+	jobs     chan iconJob
+	stop     chan struct{}
+	stopOnce sync.Once
 
 	mu       sync.Mutex
 	results  []iconResult
@@ -43,17 +45,28 @@ type iconCache struct {
 	notify   func()
 }
 
-func (ic *iconCache) init() {
+func (ic *iconCache) init(notify func()) {
 	ic.byExe = make(map[*sys.Exe]*exeIcon, 128)
 	ic.jobs = make(chan iconJob, 512)
+	ic.stop = make(chan struct{})
+	ic.notify = notify
 	go ic.work()
 }
 
 func (ic *iconCache) work() {
 	// The shell's icon handlers want a thread of their own in an apartment.
 	runtime.LockOSThread()
-	windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED)
-	for j := range ic.jobs {
+	defer runtime.UnlockOSThread()
+	if windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED) == nil {
+		defer windows.CoUninitialize()
+	}
+	for {
+		var j iconJob
+		select {
+		case <-ic.stop:
+			return
+		case j = <-ic.jobs:
+		}
 		var img *image.RGBA
 		if j.exe == nil {
 			img = sys.GenericIcon(j.px)
@@ -66,6 +79,12 @@ func (ic *iconCache) work() {
 		if ic.notified.CompareAndSwap(false, true) && ic.notify != nil {
 			ic.notify()
 		}
+	}
+}
+
+func (ic *iconCache) close() {
+	if ic.stop != nil {
+		ic.stopOnce.Do(func() { close(ic.stop) })
 	}
 }
 

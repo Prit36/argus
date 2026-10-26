@@ -1,6 +1,7 @@
 package sys
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -21,6 +22,8 @@ type Resolver struct {
 	results  chan *resolved
 	inflight atomic.Int32
 	notified atomic.Bool
+	stop     chan struct{}
+	stopOnce sync.Once
 	// Notify is called (from a worker) when results wait and none were
 	// waiting: the app asks its window to take them.
 	Notify func()
@@ -44,7 +47,7 @@ type resolved struct {
 
 // NewResolver starts n workers.
 func NewResolver(exes *ExeCache, n int) *Resolver {
-	r := &Resolver{exes: exes, jobs: make(chan job, 4096), results: make(chan *resolved, 4096)}
+	r := &Resolver{exes: exes, jobs: make(chan job, 4096), results: make(chan *resolved, 4096), stop: make(chan struct{})}
 	for range n {
 		go r.work()
 	}
@@ -54,8 +57,16 @@ func NewResolver(exes *ExeCache, n int) *Resolver {
 // queue asks for info to be resolved; false if the queue is full (it is
 // asked again at the next sample).
 func (r *Resolver) queue(info *Info, session uint32) bool {
+	select {
+	case <-r.stop:
+		return false
+	default:
+	}
 	r.inflight.Add(1)
 	select {
+	case <-r.stop:
+		r.inflight.Add(-1)
+		return false
 	case r.jobs <- job{info: info, pid: info.PID, session: session}:
 		return true
 	default:
@@ -112,13 +123,30 @@ func (s *Sampler) applyOne(res *resolved) {
 func (r *Resolver) work() {
 	cmd := make([]uint64, 32*1024/8)
 	var path [1024]uint16
-	for j := range r.jobs {
+	for {
+		var j job
+		select {
+		case <-r.stop:
+			return
+		case j = <-r.jobs:
+		}
 		res := r.resolve(j, cmd, path[:])
-		r.results <- res
+		select {
+		case <-r.stop:
+			return
+		case r.results <- res:
+		}
 		r.inflight.Add(-1)
 		if r.notified.CompareAndSwap(false, true) && r.Notify != nil {
 			r.Notify()
 		}
+	}
+}
+
+// Close cancels queued work without waiting for a slow version or account lookup.
+func (r *Resolver) Close() {
+	if r != nil {
+		r.stopOnce.Do(func() { close(r.stop) })
 	}
 }
 

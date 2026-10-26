@@ -20,6 +20,21 @@ import (
 // trayIcons are the meter's PNGs, made once per level and size.
 var trayIcons = map[int][]byte{}
 
+// A PNG encoder otherwise allocates ~830 KB of compression scratch for
+// every new meter level. The tray is UI-thread-only: reuse one encoder
+// buffer across all levels and DPI sizes.
+type trayBufferPool struct{ buffer *png.EncoderBuffer }
+
+func (p *trayBufferPool) Get() *png.EncoderBuffer {
+	b := p.buffer
+	p.buffer = nil
+	return b
+}
+
+func (p *trayBufferPool) Put(b *png.EncoderBuffer) { p.buffer = b }
+
+var trayEncoder = png.Encoder{CompressionLevel: png.BestSpeed, BufferPool: &trayBufferPool{}}
+
 func (a *App) trayPx() int {
 	scale := float64(1)
 	if a.win != nil {
@@ -56,8 +71,7 @@ func meter(px, level int) []byte {
 		}
 	}
 	var b bytes.Buffer
-	enc := png.Encoder{CompressionLevel: png.BestSpeed}
-	enc.Encode(&b, img)
+	trayEncoder.Encode(&b, img)
 	trayIcons[key] = b.Bytes()
 	return b.Bytes()
 }
