@@ -76,6 +76,15 @@ release build, steady state:
   seconds. Restoring the window restores the chosen refresh interval;
   paused updates stay paused. GPU counters are disabled while hidden.
 
+The Users page also skips sorting process rows when all accounts are collapsed.
+In an isolated 2,048-process row-build benchmark on the machine above, the
+median of three 500 ms runs fell from about 207 µs to 22 µs per rebuild,
+with zero allocations in both cases. Expanded accounts still sort by activity.
+This measures row preparation, not whole-app CPU usage. App history also avoids
+marking unchanged, idle windowed processes as new data, so they no longer
+trigger a periodic history write by themselves.
+
+
 ## Files
 
 Settings (`settings.ini`) and app history (`history.tsv`) are kept in

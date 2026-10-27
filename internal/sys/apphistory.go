@@ -62,12 +62,14 @@ func (h *History) Add(procs []Proc, session uint32) {
 			continue
 		}
 		en := h.entry(e)
+		if p.CPUDelta != 0 || p.NetDelta != 0 || (p.Windowed && !en.App) {
+			h.changed = true
+		}
 		en.CPU += p.CPUDelta
 		en.Net += p.NetDelta
 		if p.Windowed {
 			en.App = true
 		}
-		h.changed = true
 	}
 }
 

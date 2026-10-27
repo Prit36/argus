@@ -97,6 +97,16 @@ func (a *App) buildUsers() {
 	}
 	clear(a.userSums)
 	a.userOrder = a.userOrder[:0]
+	q := strings.TrimSpace(a.query)
+	needOrder := q != ""
+	if !needOrder {
+		for i := range a.sessions {
+			if a.usersOpen[a.sessions[i].ID] {
+				needOrder = true
+				break
+			}
+		}
+	}
 	for i := range a.sampler.Procs {
 		p := &a.sampler.Procs[i]
 		sum := a.userSums[p.Session]
@@ -106,7 +116,9 @@ func (a *App) buildUsers() {
 		sum.net += p.Net
 		sum.count++
 		a.userSums[p.Session] = sum
-		a.userOrder = append(a.userOrder, int32(i))
+		if needOrder {
+			a.userOrder = append(a.userOrder, int32(i))
+		}
 	}
 	slices.SortFunc(a.userOrder, func(x, y int32) int {
 		p, q := &a.sampler.Procs[x], &a.sampler.Procs[y]
@@ -123,14 +135,23 @@ func (a *App) buildUsers() {
 	})
 	a.userRows = a.userRows[:0]
 	a.userDisplay = a.userDisplay[:0]
-	q := strings.TrimSpace(a.query)
 	for i := range a.sessions {
 		s := &a.sessions[i]
-		match := accountMatches(s, q)
+		accountMatch := accountMatches(s, q)
+		match := accountMatch
+		start := 0
+		if needOrder {
+			start, _ = slices.BinarySearchFunc(a.userOrder, s.ID, func(pi int32, id uint32) int {
+				return cmp3(a.sampler.Procs[pi].Session, id)
+			})
+		}
 		if !match {
-			for _, pi := range a.userOrder {
+			for _, pi := range a.userOrder[start:] {
 				p := &a.sampler.Procs[pi]
-				if p.Session == s.ID && detailMatches(p, q) {
+				if p.Session != s.ID {
+					break
+				}
+				if detailMatches(p, q) {
 					match = true
 					break
 				}
@@ -143,15 +164,12 @@ func (a *App) buildUsers() {
 				continue
 			}
 			// Processes are already ordered by session, then activity.
-			start, _ := slices.BinarySearchFunc(a.userOrder, s.ID, func(pi int32, id uint32) int {
-				return cmp3(a.sampler.Procs[pi].Session, id)
-			})
 			for _, pi := range a.userOrder[start:] {
 				p := &a.sampler.Procs[pi]
 				if p.Session != s.ID {
 					break
 				}
-				if accountMatches(s, q) || detailMatches(p, q) {
+				if accountMatch || detailMatches(p, q) {
 					a.userDisplay = append(a.userDisplay, pi)
 				}
 			}
