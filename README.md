@@ -1,6 +1,6 @@
 # Argus
 
-Version 0.0.1 · [Download for Windows](https://github.com/Prit36/argus/releases/tag/v0.0.1)
+Version 0.0.2 · [Download for Windows](https://github.com/Prit36/argus/releases/tag/v0.0.2)
 
 A native Windows process monitor inspired by Windows 11 Task Manager,
 written in Go with the [mygo](https://github.com/egoist/mygo) native UI.

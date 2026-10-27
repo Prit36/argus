@@ -1,7 +1,7 @@
 {
   "name": "Argus",
   "identifier": "dev.argus.app",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "out": "build",
   "resources": ["LICENSE", "THIRD_PARTY_NOTICES.txt"]
 }
