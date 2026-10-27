@@ -73,7 +73,9 @@ func (a *App) processesPage(c *ui.Context, k *colors) {
 		a.refreshRows()
 	}
 	if shown(a.set.ProcColumns, pcNetwork) && !a.netmon.Available {
-		header.Tooltip("Each process's network use is shown when Task Manager runs as administrator")
+		header.Tooltip("Per-process network usage is unavailable. Restart as administrator to try tracing.")
+	} else if shown(a.set.ProcColumns, pcNetwork) && a.netmon.UsesEnergy() {
+		header.Tooltip("Network usage uses Windows counters. A dash means one or more processes could not be read.")
 	}
 	rows := a.model.Rows
 	// The list's choice is the selected key's row, wherever it is now.
@@ -269,6 +271,9 @@ func (a *App) processRow(c *ui.Context, k *colors, r *Row, shownList []ProcCol, 
 				text := ""
 				if a.netmon.Available {
 					text = r.netText
+					if r.NetUnknown {
+						text = "-"
+					}
 				}
 				heatCell(c, k, cc, text, r.Net*8/50e6, sel, hovered)
 			case pcGPU:

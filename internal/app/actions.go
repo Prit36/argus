@@ -440,8 +440,7 @@ func (a *App) browse() {
 	}()
 }
 
-// relaunchAsAdmin starts this program again as administrator (each
-// process's network use needs it); true if it started.
+// relaunchAsAdmin starts this program again as administrator; true if it started.
 func relaunchAsAdmin() bool {
 	exe, err := os.Executable()
 	if err != nil {

@@ -16,7 +16,7 @@ func (a *App) selectionText() string {
 		if r := a.selectedRow(); r != nil {
 			p = &a.sampler.Procs[r.Proc]
 			return strings.Join([]string{"Name", "CPU", "Memory", "Disk", "Network", "Path"}, "\t") + "\r\n" +
-				strings.Join([]string{r.Title, cpuCell(r.CPU), mbCell(r.Memory), diskCell(r.Disk), a.copyNetwork(r.Net), p.Info.Path()}, "\t")
+				strings.Join([]string{r.Title, cpuCell(r.CPU), mbCell(r.Memory), diskCell(r.Disk), a.copyNetwork(r.Net, r.NetUnknown), p.Info.Path()}, "\t")
 		}
 	case PageDetails:
 		p = a.detailsSelected()
@@ -43,8 +43,8 @@ func (a *App) selectionText() string {
 		strings.Join([]string{p.Info.Name, itoa(p.PID), p.Info.User, cpuCell(p.CPU), mbCell(p.PrivateWS), p.Info.Path()}, "\t")
 }
 
-func (a *App) copyNetwork(rate float32) string {
-	if !a.netmon.Available {
+func (a *App) copyNetwork(rate float32, unknown bool) string {
+	if !a.netmon.Available || unknown {
 		return "Unavailable"
 	}
 	return netCell(rate)

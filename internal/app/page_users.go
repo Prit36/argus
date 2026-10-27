@@ -23,11 +23,12 @@ var userCols = [...]column{
 }
 
 type userSum struct {
-	cpu    float32
-	memory uint64
-	disk   float32
-	net    float32
-	count  int
+	cpu        float32
+	memory     uint64
+	disk       float32
+	net        float32
+	netUnknown bool
+	count      int
 }
 
 func (a *App) usersPage(c *ui.Context, k *colors) {
@@ -114,6 +115,7 @@ func (a *App) buildUsers() {
 		sum.memory += p.PrivateWS
 		sum.disk += p.IO()
 		sum.net += p.Net
+		sum.netUnknown = sum.netUnknown || !p.NetKnown
 		sum.count++
 		a.userSums[p.Session] = sum
 		if needOrder {
@@ -238,6 +240,9 @@ func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, co
 		net := ""
 		if a.netmon.Available {
 			net = netCell(sum.net)
+			if sum.netUnknown {
+				net = "-"
+			}
 		}
 		heatCell(c, k, &cols[5], net, sum.net*8/50e6, sel, hovered)
 	})
@@ -284,6 +289,9 @@ func (a *App) userProgram(c *ui.Context, k *colors, p *sys.Proc, cols []column, 
 		net := ""
 		if a.netmon.Available {
 			net = netCell(p.Net)
+			if !p.NetKnown {
+				net = "-"
+			}
 		}
 		heatCell(c, k, &cols[5], net, p.Net*8/50e6, sel, hovered)
 	})

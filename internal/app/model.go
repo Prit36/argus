@@ -91,6 +91,7 @@ type Row struct {
 	Memory     uint64
 	Disk       float32
 	Net        float32
+	NetUnknown bool
 	GPU        float32
 	Suspended  bool
 	Hung       bool
@@ -107,20 +108,21 @@ type Row struct {
 }
 
 type group struct {
-	key       uint64
-	category  Category
-	root      int32
-	start     int32
-	len       int32
-	title     string
-	cpu       float32
-	memory    uint64
-	disk      float32
-	net       float32
-	gpu       float32
-	suspended bool
-	hung      bool
-	visible   bool
+	key        uint64
+	category   Category
+	root       int32
+	start      int32
+	len        int32
+	title      string
+	cpu        float32
+	memory     uint64
+	disk       float32
+	net        float32
+	netUnknown bool
+	gpu        float32
+	suspended  bool
+	hung       bool
+	visible    bool
 }
 
 // Model is the Processes page's rows.
@@ -247,6 +249,7 @@ func (m *Model) build(list []sys.Proc, o buildOptions) {
 			g.memory += p.PrivateWS
 			g.disk += p.IO()
 			g.net += p.Net
+			g.netUnknown = g.netUnknown || !p.NetKnown
 			g.gpu = min(100, g.gpu+p.GPU)
 			if !p.Suspended {
 				g.suspended = false
@@ -323,6 +326,7 @@ func (m *Model) emit(list []sys.Proc, g *group, searching bool) {
 		Memory:     g.memory,
 		Disk:       g.disk,
 		Net:        g.net,
+		NetUnknown: g.netUnknown,
 		GPU:        g.gpu,
 		Suspended:  g.suspended,
 		Hung:       g.hung,
@@ -351,6 +355,7 @@ func (m *Model) emit(list []sys.Proc, g *group, searching bool) {
 			Memory:     p.PrivateWS,
 			Disk:       p.IO(),
 			Net:        p.Net,
+			NetUnknown: !p.NetKnown,
 			GPU:        p.GPU,
 			Suspended:  p.Suspended,
 			Hung:       p.Hung,

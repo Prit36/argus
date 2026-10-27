@@ -80,7 +80,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 			a.toggleCard(c, k, room, "Show history for all processes", "App history lists every program of yours, not only apps", &a.set.HistoryAll, nil)
 			a.toggleCard(c, k, room, "Ask me before applying Efficiency mode", "Confirm before lowering a process's priority and power use", &a.set.AskEfficiency, nil)
 			if !a.netmon.Available {
-				a.card(c, k, room, "Run as administrator", "Each process's network use, and ending and changing other users' processes, need administrator rights", 90, func() {
+				a.card(c, k, room, "Run as administrator", "May enable process network usage and access to other users' processes", 90, func() {
 					if ui.Button(c, "Restart").Clicked() && relaunchAsAdmin() {
 						mygo.App.Quit()
 					}

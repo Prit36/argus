@@ -130,6 +130,7 @@ type Proc struct {
 	// sample, when per-process figures can be had.
 	Net      float32
 	NetDelta uint64
+	NetKnown bool
 	// GPU is its busiest engine's use, 0–100, and which: the adapter and
 	// the engine's kind (GPUKindOther for another).
 	GPU        float32

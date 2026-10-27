@@ -41,13 +41,23 @@ as "Task Manager".
 | Package | What it holds |
 |---|---|
 | `internal/winapi` | The Win32/NT calls, made with `syscall.SyscallN` so steady sampling allocates nothing |
-| `internal/sys` | Reading the machine: processes (one `NtQuerySystemInformation` per tick), CPU, memory, disks, network, GPU (PDH, on a worker), services, startup items, sessions, ETW per-process network (as administrator), app history, icons |
+| `internal/sys` | Reading the machine: processes (one `NtQuerySystemInformation` per tick), CPU, memory, disks, network, GPU (PDH, on a worker), services, startup items, sessions, per-process network, app history, icons |
 | `internal/app` | State, sampling timer, commands and the mygo views |
 
 Every field of `App` belongs to the UI thread. Blocking work (version
 resources and account names on a pool of 4 resolvers, icons on a COM STA
 thread, services, sessions, startup items, PDH) runs on goroutines that
 hand their results back through `Window.Update`.
+
+Per-process network use uses an ETW trace when permitted. Otherwise it reads
+Windows' native per-process network counters without elevation, provided the
+Windows Network Data Usage driver is running. These counters use an
+undocumented Windows interface, which may change in a future release. A dash
+means Windows did not allow a process to be read; group and user totals are
+also shown as unavailable if any of their processes could not be read. The
+fallback establishes a baseline on its first sample, and its counts may
+update with a short delay. If neither source is available, per-process network
+figures are unavailable.
 
 ## Performance
 

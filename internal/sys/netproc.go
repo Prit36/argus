@@ -71,11 +71,9 @@ func (c *netCounters) reset() {
 	clear(c.slots[:])
 }
 
-// NetMonitor counts each process's network use, as Task Manager does: the
-// kernel's network provider reports every TCP and UDP send and receive
-// with its process and size, through a real-time trace session read on a
-// goroutine of its own. Starting a session needs administrator rights;
-// without them Available is false.
+// NetMonitor uses a real-time network trace when permitted, and otherwise
+// samples Windows' per-process network energy counters. The latter needs the
+// Windows Network Data Usage driver and access to each process.
 type NetMonitor struct {
 	session   uint64
 	trace     uint64
@@ -83,6 +81,9 @@ type NetMonitor struct {
 	mu        sync.Mutex
 	counters  netCounters
 	copy      []netEntry
+	energy    bool
+	previous  map[procKey]uint64
+	current   map[procKey]uint64
 }
 
 var (
@@ -90,8 +91,21 @@ var (
 	eventCallback = windows.NewCallback(onNetEvent)
 )
 
-// Start starts the trace session; Available says whether it did.
+// Start selects a network source; Available says whether one was found.
 func (m *NetMonitor) Start() {
+	if m.startTrace() {
+		return
+	}
+	if nduRunning() {
+		if _, ok := processNetworkBytes(windows.CurrentProcess()); ok {
+			m.energy, m.Available = true, true
+			m.previous = make(map[procKey]uint64)
+			m.current = make(map[procKey]uint64)
+		}
+	}
+}
+
+func (m *NetMonitor) startTrace() bool {
 	props := newTraceProps()
 	st := winapi.StartTrace(&m.session, &traceName[0], unsafe.Pointer(props))
 	if st == uint32(windows.ERROR_ALREADY_EXISTS) {
@@ -101,12 +115,12 @@ func (m *NetMonitor) Start() {
 		st = winapi.StartTrace(&m.session, &traceName[0], unsafe.Pointer(props))
 	}
 	if st != 0 {
-		return
+		return false
 	}
 	// Level 4 (information); keywords IPv4 and IPv6.
 	if winapi.EnableTraceEx2(m.session, &kernelNetwork, 1, 4, 0x10|0x20) != 0 {
 		m.stopSession()
-		return
+		return false
 	}
 	activeMonitor = m
 	log := winapi.EventTraceLogfile{
@@ -118,14 +132,97 @@ func (m *NetMonitor) Start() {
 	m.trace = winapi.OpenTrace(&log)
 	if m.trace == winapi.InvalidTrace {
 		m.stopSession()
-		return
+		return false
 	}
 	m.Available = true
 	go func(h uint64) {
 		// Returns once the session stops.
 		winapi.ProcessTrace(&h)
 	}(m.trace)
+	return true
 }
+
+// ProcessEnergyValues is a Windows native API, available since Windows 10
+// 1703. NetworkTxRxBytes is at offset 88 in PROCESS_ENERGY_VALUES; the
+// remaining fields are deliberately opaque because Windows has extended
+// the structure over time. NetworkTxRxBytes includes both send and receive.
+func processNetworkBytes(h windows.Handle) (uint64, bool) {
+	var data [432 / 8]uint64
+	st := winapi.NtQueryInformationProcess(h, 76, unsafe.Pointer(&data[0]), uint32(unsafe.Sizeof(data)))
+	return data[11], st == 0
+}
+
+func nduRunning() bool {
+	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return false
+	}
+	defer windows.CloseServiceHandle(scm)
+	h, err := windows.OpenService(scm, windows.StringToUTF16Ptr("Ndu"), windows.SERVICE_QUERY_STATUS)
+	if err != nil {
+		return false
+	}
+	defer windows.CloseServiceHandle(h)
+	var status windows.SERVICE_STATUS
+	return windows.QueryServiceStatus(h, &status) == nil && status.CurrentState == windows.SERVICE_RUNNING
+}
+
+// SampleEnergy reads accessible processes and computes deltas using both PID
+// and creation time, so a reused PID never inherits another process's bytes.
+func (m *NetMonitor) SampleEnergy(procs []Proc, dt float64) {
+	if !m.Available || !m.energy {
+		return
+	}
+	m.sampleEnergy(procs, dt, readProcessNetwork)
+}
+
+func readProcessNetwork(p *Proc) (uint64, bool) {
+	if p.PID == 0 || p.Info == nil {
+		return 0, false
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, p.PID)
+	if err != nil {
+		return 0, false
+	}
+	var created, exited, kernel, user windows.Filetime
+	err = windows.GetProcessTimes(h, &created, &exited, &kernel, &user)
+	creation := uint64(created.HighDateTime)<<32 | uint64(created.LowDateTime)
+	if err != nil || creation != uint64(p.Info.CreateTime) {
+		windows.CloseHandle(h)
+		return 0, false
+	}
+	value, ok := processNetworkBytes(h)
+	windows.CloseHandle(h)
+	return value, ok
+}
+
+func (m *NetMonitor) sampleEnergy(procs []Proc, dt float64, read func(*Proc) (uint64, bool)) {
+	clear(m.current)
+	for i := range procs {
+		p := &procs[i]
+		p.Net, p.NetDelta, p.NetKnown = 0, 0, false
+		if p.PID == 0 || p.Info == nil {
+			continue
+		}
+		value, ok := read(p)
+		if !ok {
+			continue
+		}
+		key := procKey{p.PID, p.Info.CreateTime}
+		m.current[key] = value
+		p.NetKnown = true
+		if old, found := m.previous[key]; found {
+			p.NetDelta = sub(value, old)
+			if dt > 0 {
+				p.Net = float32(float64(p.NetDelta) / dt)
+			}
+		}
+	}
+	m.previous, m.current = m.current, m.previous
+}
+
+// UsesEnergy reports whether the fallback is active.
+func (m *NetMonitor) UsesEnergy() bool { return m.energy }
 
 func (m *NetMonitor) stopSession() {
 	winapi.ControlTrace(m.session, nil, unsafe.Pointer(newTraceProps()), 1)
@@ -138,6 +235,11 @@ func (m *NetMonitor) Stop() {
 		return
 	}
 	m.Available = false
+	if m.energy {
+		m.energy = false
+		m.previous, m.current = nil, nil
+		return
+	}
 	m.stopSession()
 	winapi.CloseTrace(m.trace)
 }
@@ -145,7 +247,7 @@ func (m *NetMonitor) Stop() {
 // Take calls f with each process's bytes since the last call, and starts
 // counting again.
 func (m *NetMonitor) Take(f func(pid uint32, bytes uint64)) {
-	if !m.Available {
+	if !m.Available || m.energy {
 		return
 	}
 	m.mu.Lock()

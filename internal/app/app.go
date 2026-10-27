@@ -553,15 +553,20 @@ func (a *App) requestAddresses() {
 }
 
 // mergeNetwork puts each process's network use since the last sample on
-// its row, from the trace.
+// its row, from the available network source.
 func (a *App) mergeNetwork(dt float64) {
 	if !a.netmon.Available {
+		return
+	}
+	a.netmon.SampleEnergy(a.sampler.Procs, dt)
+	if a.netmon.UsesEnergy() {
 		return
 	}
 	clear(a.netBytes)
 	a.netmon.Take(func(pid uint32, bytes uint64) { a.netBytes[pid] += bytes })
 	for i := range a.sampler.Procs {
 		p := &a.sampler.Procs[i]
+		p.NetKnown = true
 		b, ok := a.netBytes[p.PID]
 		if !ok {
 			continue

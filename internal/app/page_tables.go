@@ -319,7 +319,7 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 	ui.Row(c).FillWidth().Padding(0, pagePad, 8, pagePad).Gap(6).Shrink(0).Children(func() {
 		ui.Text(c, "Resource usage since "+sys.FiletimeDate(h.Since)+" for current user account.").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
 		if !a.netmon.Available {
-			ui.Text(c, "Network use is counted when Task Manager runs as administrator.").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
+			ui.Text(c, "Network usage is unavailable; restarting as administrator may enable it.").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
 		}
 	})
 	q := strings.TrimSpace(a.query)
