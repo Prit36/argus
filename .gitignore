@@ -3,3 +3,25 @@ build/
 *.prof
 coverage.out
 .claude/
+
+# Local credentials and machine-specific configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime data, diagnostic captures and compiler output.
+*.exe
+*.dll
+*.syso
+*.pprof
+*.dmp
+*.etl
+settings.ini
+history.tsv
+window-state.json

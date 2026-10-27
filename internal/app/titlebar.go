@@ -24,7 +24,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 	ui.Row(c).FillWidth().Height(titleH).AlignItems(ui.Center).Background(k.backdrop).Shrink(0).DragWindow().Children(func() {
 		ui.Row(c).Height(titleH).AlignItems(ui.Center).Gap(10).PaddingStart(16).PassThrough().Children(func() {
 			logo(c, k, 16)
-			ui.Text(c, "Task Manager").FontSize(fontSmall).TextColor(textColor).NoWrap()
+			ui.Text(c, "Argus").FontSize(fontSmall).TextColor(textColor).NoWrap()
 		})
 		ui.Spacer(c)
 		a.searchBox(c, k)
@@ -33,16 +33,16 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 	})
 }
 
-// logo is the app's mark: a tile with a pulse on it.
+// logo is Argus's mark: a mint A and amber dot on a navy tile.
 func logo(c *ui.Context, k *colors, size float32) {
-	tile := k.cpu
 	ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		s := size / 16
-		p.Fill(r, tile, 3.5*s)
-		var pulse ui.Path
-		pulse.MoveTo(r.X+2.5*s, r.Y+9*s).LineTo(r.X+5.5*s, r.Y+9*s).LineTo(r.X+7*s, r.Y+5*s).
-			LineTo(r.X+9.3*s, r.Y+12*s).LineTo(r.X+10.8*s, r.Y+8*s).LineTo(r.X+13.5*s, r.Y+8*s)
-		p.StrokePath(&pulse, 1.4*s, white)
+		p.Fill(r, ui.Hex("#102b36"), 3.5*s)
+		var mark ui.Path
+		mark.MoveTo(r.X+4*s, r.Y+12*s).LineTo(r.X+8*s, r.Y+4*s).LineTo(r.X+12*s, r.Y+12*s)
+		mark.MoveTo(r.X+5.5*s, r.Y+9*s).LineTo(r.X+10.5*s, r.Y+9*s)
+		p.StrokePath(&mark, 1.4*s, ui.Hex("#70e1c2"))
+		p.Fill(ui.Rect{X: r.X + 11.5*s, Y: r.Y + 3*s, W: 2 * s, H: 2 * s}, ui.Hex("#ffc66d"), s)
 	})
 }
 

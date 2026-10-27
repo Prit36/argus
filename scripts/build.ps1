@@ -1,8 +1,8 @@
-# Builds the task manager.
+# Builds Argus.
 #
-#   scripts\build.ps1          production build: build\windows-amd64\Task Manager.exe
+#   scripts\build.ps1          production build: build\windows-amd64\Argus.exe
 #                              and its installer (mygo build)
-#   scripts\build.ps1 -Dev     development build with a console: build\dev\taskmgr.exe
+#   scripts\build.ps1 -Dev     development build with a console: build\dev\Argus.exe
 #   scripts\build.ps1 -Test    vet and run the tests
 #
 # Go comes from PATH, or GO_EXE.
@@ -19,8 +19,12 @@ if ($Test) {
     exit $LASTEXITCODE
 }
 if ($Dev) {
-    & $go build -o build\dev\taskmgr.exe .
+    & $go build -trimpath -o build\dev\Argus.exe .
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    Copy-Item -LiteralPath LICENSE, THIRD_PARTY_NOTICES.txt -Destination build\dev
     exit $LASTEXITCODE
 }
+# Remove machine-specific source paths from distributable binaries.
+$env:GOFLAGS = ($env:GOFLAGS + ' -trimpath').Trim()
 & $go tool mygo build
 exit $LASTEXITCODE

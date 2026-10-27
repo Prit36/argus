@@ -85,7 +85,7 @@ func meterKey(px, level int) int {
 }
 
 func (a *App) trayTip() string {
-	return "CPU: " + fmtPercent(a.sampler.CPU*100) +
+	return "Argus\nCPU: " + fmtPercent(a.sampler.CPU*100) +
 		"\nMemory: " + fmtPercent(a.mem.Load()*100) +
 		"\nDisk: " + fmtPercent(a.disks.Busiest()*100) +
 		"\nNetwork: " + fmtPercent(a.net.Load()*100)
@@ -104,7 +104,7 @@ func (a *App) addTray() {
 	t.OnClick(a.showWindow)
 	t.OnRightClick(func() {
 		t.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Label: "Show Task Manager", Click: func(*mygo.MenuItem, *mygo.Window) { a.showWindow() }},
+			{Label: "Show Argus", Click: func(*mygo.MenuItem, *mygo.Window) { a.showWindow() }},
 			mygo.Separator(),
 			{Label: "Close", Click: func(*mygo.MenuItem, *mygo.Window) {
 				if a.win != nil {

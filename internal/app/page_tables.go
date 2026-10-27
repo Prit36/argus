@@ -381,7 +381,7 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 		a.saveSettings()
 	}
 	if len(a.historyRows) == 0 {
-		msg := "No app history yet: it's counted while Task Manager runs"
+		msg := "No app history yet: it's counted while Argus runs"
 		if q != "" {
 			msg = noResults(q)
 		}

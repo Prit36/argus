@@ -1,11 +1,18 @@
 # Argus
 
-A native Windows 11 Task Manager in Go, drawn with the
-[mygo](https://github.com/egoist/mygo) native UI: Processes (grouped
+Version 0.0.1 · [Download for Windows](https://github.com/Prit36/argus/releases/tag/v0.0.1)
+
+A native Windows process monitor inspired by Windows 11 Task Manager,
+written in Go with the [mygo](https://github.com/egoist/mygo) native UI.
+Argus includes Processes (grouped
 apps / background / Windows processes, heat-colored cells, column
 chooser), Performance (CPU, memory, disks, network adapters and GPUs with
 60-second graphs), App history, Startup apps, Users, Details, Services
 and Settings, plus the tray CPU meter.
+
+Argus is an independent project. It is not affiliated with, endorsed by,
+or sponsored by Microsoft. Microsoft and Windows are trademarks of the
+Microsoft group of companies.
 
 ## Quality of life
 
@@ -36,14 +43,22 @@ and Settings, plus the tray CPU meter.
 ## Build
 
 ```powershell
-scripts\build.ps1          # build\windows-amd64\Task Manager.exe + installer
-scripts\build.ps1 -Dev     # build\dev\taskmgr.exe, with a console for logs
+scripts\build.ps1          # build\windows-amd64\Argus.exe + installer
+scripts\build.ps1 -Dev     # build\dev\Argus.exe, with a console for logs
 scripts\build.ps1 -Test    # go vet + go test
 ```
 
-Go 1.27 is needed (`go.mod`). `mygo build` embeds the icon, a
-per-monitor-DPI manifest and version information, so the app lists itself
-as "Task Manager".
+Build on Windows with Go 1.27.3 or later, as specified in `go.mod`.
+The mygo build tool is pinned in `go.mod`; no separate global installation
+is needed. `mygo build` embeds the Argus icon, a per-monitor-DPI manifest
+and version information. The build script removes local source paths
+from the binaries.
+
+Keep `LICENSE` and `THIRD_PARTY_NOTICES.txt` alongside the executable when
+sharing a build. Both the development build script and production packaging
+include these files. Review and update dependency notices after changing
+dependencies or the Go toolchain. The app icon's editable source is
+`resources/icon.svg`.
 
 ## Layout
 
@@ -80,8 +95,6 @@ release build, steady state:
 | Private bytes | ~68 MB |
 | Threads | ~21 |
 
-- A sample (all processes, rates, groups) takes ~1 ms and allocates
-  nothing (`go test ./internal/sys -bench Sample -benchmem`).
 - Frames take ~1–2 ms and redraw only what changed.
 - The UI draws in software by default: the GPU's driver would add ~45 MB
   and two dozen threads for frames this small. `MYGO_GPU=1` draws on the
@@ -95,19 +108,17 @@ release build, steady state:
   seconds. Restoring the window restores the chosen refresh interval;
   paused updates stay paused. GPU counters are disabled while hidden.
 
-The Users page also skips sorting process rows when all accounts are collapsed.
-In an isolated 2,048-process row-build benchmark on the machine above, the
-median of three 500 ms runs fell from about 207 µs to 22 µs per rebuild,
-with zero allocations in both cases. Expanded accounts still sort by activity.
-This measures row preparation, not whole-app CPU usage. App history also avoids
-marking unchanged, idle windowed processes as new data, so they no longer
-trigger a periodic history write by themselves.
-
-
 ## Files
 
 Settings (`settings.ini`) and app history (`history.tsv`) are kept in
-`%LOCALAPPDATA%\argus`. mygo keeps the window's place in `%APPDATA%\Task Manager`.
+`%LOCALAPPDATA%\argus`. mygo keeps the window's place in `%APPDATA%\Argus`.
+After upgrading from an older build named Task Manager, window placement starts
+fresh; settings and app history stay in their existing Argus directory.
+
+Argus reads local process, hardware, service and account information. App
+history is stored locally. The Search online action opens Bing in your default
+browser with the selected process's name and description. Memory dumps can
+contain private data; review them before sharing.
 
 ## Testing hooks
 
@@ -115,6 +126,23 @@ Settings (`settings.ini`) and app history (`history.tsv`) are kept in
 |---|---|
 | `TASKMAN_NO_ACTIVATE=1` | Show the window without taking the focus |
 | `TASKMAN_PAGE=n` | Open on page `n` (its number in settings.ini) |
-| `TASKMAN_CPUPROFILE=file` | Write a CPU profile of the run |
-| `TASKMAN_MEMPROFILE=file` | Write a heap profile as the window closes |
 | `TASKMAN_SNAPSHOTS=dir` | `go test ./internal/app` saves each tested frame there |
+
+The `TASKMAN_` environment variable names are retained for compatibility with
+existing development scripts.
+
+## License and credits
+
+Argus's original code, documentation and app icon are available under the
+[MIT license](LICENSE). Argus was ported from the author's own earlier Zig
+implementation. Third-party dependencies retain their own licenses; full
+notices for the Windows application and Go runtime are included in
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+
+The interface takes inspiration from Windows 11 Task Manager. The Argus app
+mark is original artwork, with its editable source in
+[resources/icon.svg](resources/icon.svg). Text and command glyphs use fonts
+already installed on the user's Windows system; no Windows font files are
+distributed. Process icons are read from installed applications at runtime
+to identify those applications. Third-party trademarks and assets remain
+the property of their respective owners.

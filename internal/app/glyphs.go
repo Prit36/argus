@@ -10,10 +10,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The line icons Task Manager's pages and commands use: Windows 11's own,
-// the Segoe Fluent Icons (or Segoe MDL2 Assets) font's glyphs. Where the
-// font isn't installed, the same icons as SVG on a 24-unit grid. Tinted
-// with the text's color.
+// Navigation and command icons use the user's installed Segoe Fluent Icons
+// or Segoe MDL2 Assets font. No Windows font files are bundled. When neither
+// font is installed, the geometric SVG drawings below serve as fallbacks.
 
 // Icon is an icon of the app.
 type Icon uint8

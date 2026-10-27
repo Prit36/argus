@@ -19,7 +19,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 	ui.Scroll(c.Key("settings")).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Padding(0, pagePad, 24, pagePad).Gap(6).Children(func() {
 			section(c, k, "Appearance", true)
-			a.card(c, k, room, "App theme", "Choose how Task Manager looks", 350, func() {
+			a.card(c, k, room, "App theme", "Choose how Argus looks", 350, func() {
 				mode := a.set.Theme
 				g := ui.RadioGroup(c, func() {
 					ui.Radio(c, &mode, ThemeSystem, "Use system setting")
@@ -33,7 +33,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.setTheme(mode)
 				}
 			})
-			section(c, k, "Task Manager options", false)
+			section(c, k, "Argus options", false)
 			a.card(c, k, room, "Real time update speed", "How often the figures and graphs refresh", 300, func() {
 				speed := a.set.Speed
 				g := ui.RadioGroup(c, func() {
@@ -48,7 +48,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.setSpeed(speed)
 				}
 			})
-			a.card(c, k, room, "Default start page", "The page Task Manager opens on", 200, func() {
+			a.card(c, k, room, "Default start page", "The page Argus opens on", 200, func() {
 				var names [len(startPages)]string
 				chosen := ""
 				for i, p := range startPages {
@@ -66,15 +66,15 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.saveSettings()
 				}
 			})
-			a.toggleCard(c, k, room, "Always on top", "Keep Task Manager above other windows", &a.set.AlwaysOnTop, func() {
+			a.toggleCard(c, k, room, "Always on top", "Keep Argus above other windows", &a.set.AlwaysOnTop, func() {
 				if a.win != nil {
 					a.win.SetAlwaysOnTop(a.set.AlwaysOnTop)
 				}
 			})
 			a.toggleCard(c, k, room, "Group by type", "Show process categories; clicking a column sorts across all categories", &a.set.GroupByType, nil)
 			section(c, k, "Window management", false)
-			a.toggleCard(c, k, room, "Minimize on use", "Minimize Task Manager after switching to an app", &a.set.MinimizeOnUse, nil)
-			a.toggleCard(c, k, room, "Hide when minimized", "Keep Task Manager in the notification area, not the taskbar, while minimized", &a.set.HideMinimized, nil)
+			a.toggleCard(c, k, room, "Minimize on use", "Minimize Argus after switching to an app", &a.set.MinimizeOnUse, nil)
+			a.toggleCard(c, k, room, "Hide when minimized", "Keep Argus in the notification area, not the taskbar, while minimized", &a.set.HideMinimized, nil)
 			section(c, k, "Other options", false)
 			a.toggleCard(c, k, room, "Show full account name", "On the Users page, the name each account belongs to", &a.set.FullAccountName, nil)
 			a.toggleCard(c, k, room, "Show history for all processes", "App history lists every program of yours, not only apps", &a.set.HistoryAll, nil)
@@ -89,9 +89,10 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 			}
 			section(c, k, "About", false)
 			a.card(c, k, room, "Keyboard shortcuts", "Ctrl+F: search  ·  Ctrl+P: pause or resume  ·  F5: refresh now  ·  Ctrl+C: copy selection  ·  Ctrl+1–8: switch pages", 0, func() {})
-			a.card(c, k, room, "Task Manager on mygo", "A native Windows 11 Task Manager in Go, drawn by mygo", 120, func() {
+			a.card(c, k, room, "Argus", "An independent Windows process monitor, built in Go with mygo", 120, func() {
 				ui.Text(c, "mygo "+mygo.Version).FontSize(fontSmall).TextColor(k.secondary).NoWrap()
 			})
+			a.card(c, k, room, "Independent project", "Inspired by Windows 11 Task Manager. Not affiliated with, endorsed by, or sponsored by Microsoft.", 0, func() {})
 		})
 	})
 }

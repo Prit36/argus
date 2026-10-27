@@ -3,12 +3,9 @@ package app
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
-	"runtime/pprof"
 	"strconv"
 	"time"
 
@@ -34,13 +31,7 @@ func Run() error {
 	if _, set := os.LookupEnv("MYGO_GPU"); !set {
 		os.Setenv("MYGO_GPU", "0")
 	}
-	if path := os.Getenv("TASKMAN_CPUPROFILE"); path != "" {
-		// For measuring: the CPU profile of the whole run.
-		if f, err := os.Create(path); err == nil && pprof.StartCPUProfile(f) == nil {
-			defer func() { pprof.StopCPUProfile(); f.Close() }()
-		}
-	}
-	mygo.App.SetName("Task Manager")
+	mygo.App.SetName("Argus")
 	if !mygo.App.RequestSingleInstanceLock() {
 		return nil // the running task manager comes forward
 	}
@@ -110,7 +101,7 @@ func (a *App) start() {
 	}
 	background := os.Getenv("TASKMAN_BACKGROUND") != "" || os.Getenv("TASKMAN_NO_ACTIVATE") != ""
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:             "Task Manager",
+		Title:             "Argus",
 		Width:             w,
 		Height:            h,
 		MinWidth:          640,
@@ -172,10 +163,6 @@ func (a *App) start() {
 		}
 	})
 	win.OnClosed(func() {
-		if path := os.Getenv("TASKMAN_MEMPROFILE"); path != "" {
-			// For measuring: the heap as the window closes.
-			writeHeapProfile(path)
-		}
 		a.shutdown()
 		if a.tray != nil {
 			a.tray.Destroy()
@@ -211,18 +198,4 @@ func (a *App) start() {
 			a.startTimer()
 		})
 	})
-}
-
-// writeHeapProfile writes the live heap, and the runtime's memory figures,
-// to path (and path.txt).
-func writeHeapProfile(path string) {
-	runtime.GC()
-	if f, err := os.Create(path); err == nil {
-		pprof.Lookup("heap").WriteTo(f, 0)
-		f.Close()
-	}
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	os.WriteFile(path+".txt", []byte(fmt.Sprintf("heap inuse %d KB, heap idle %d KB, released %d KB, stacks %d KB, sys %d KB, objects %d, gc %d",
-		m.HeapInuse>>10, m.HeapIdle>>10, m.HeapReleased>>10, m.StackInuse>>10, m.Sys>>10, m.HeapObjects, m.NumGC)), 0o644)
 }
