@@ -225,7 +225,7 @@ func (a *App) endDetails(tree bool) {
 			}
 		}
 	}
-	a.confirmPIDs, a.confirmTitle, a.confirmEnd = pids, p.Info.Name, true
+	a.confirmProcesses(pids, p.Info.Name)
 }
 
 func (a *App) toggleDetailsEfficiency() {

@@ -134,7 +134,7 @@ func appendStartup(list []StartupItem, src startupSource, value, command string,
 func (it *StartupItem) SetEnabled(on bool) error {
 	k, _, err := registry.CreateKey(it.source.root, it.source.approved, registry.WRITE|registry.WOW64_64KEY)
 	if err != nil {
-		return ErrAccessDenied
+		return err
 	}
 	defer k.Close()
 	data := make([]byte, 12)
@@ -148,7 +148,7 @@ func (it *StartupItem) SetEnabled(on bool) error {
 		binary.LittleEndian.PutUint32(data[8:], ft.HighDateTime)
 	}
 	if err := k.SetBinaryValue(it.Value, data); err != nil {
-		return ErrAccessDenied
+		return err
 	}
 	it.Enabled = on
 	return nil

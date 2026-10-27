@@ -1,10 +1,12 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"golang.org/x/sys/windows"
 
 	"taskmgr/internal/sys"
 )
@@ -28,17 +30,18 @@ func (a *App) servicesPage(c *ui.Context, k *colors) {
 		compact := a.narrowerThan(c, 960)
 		sv := a.serviceSelected()
 		running := sv != nil && sv.State == sys.ServiceRunning
+		available := !a.serviceActionBusy
 		if commandButton(c, k, command{icon: icRun, label: "Run new task", enabled: true, compact: compact}) {
 			a.openRun()
 		}
 		separator(c, k)
-		if commandButton(c, k, command{icon: icPlay, label: "Start", enabled: sv != nil && !running, compact: compact}) {
+		if commandButton(c, k, command{icon: icPlay, label: "Start", enabled: available && sv != nil && !running, compact: compact}) {
 			a.controlService(sys.ServiceStart)
 		}
-		if commandButton(c, k, command{icon: icStop, label: "Stop", enabled: running, compact: compact}) {
+		if commandButton(c, k, command{icon: icStop, label: "Stop", enabled: available && running, compact: compact}) {
 			a.controlService(sys.ServiceStop)
 		}
-		if commandButton(c, k, command{icon: icRestart, label: "Restart", enabled: running, compact: compact}) {
+		if commandButton(c, k, command{icon: icRestart, label: "Restart", enabled: available && running, compact: compact}) {
 			a.controlService(sys.ServiceRestart)
 		}
 		separator(c, k)
@@ -146,19 +149,35 @@ func (a *App) serviceSelected() *sys.Service {
 // goroutine: a restart waits for it to stop.
 func (a *App) controlService(action sys.ServiceAction) {
 	s := a.serviceSelected()
-	if s == nil {
+	if s == nil || a.serviceActionBusy {
 		return
 	}
 	name := s.Name
+	a.serviceActionBusy = true
+	a.toast("info", "Sending request to "+action.String()+" "+name+"…")
 	go func() {
 		err := sys.ControlService(name, action)
 		a.post(func() {
+			a.serviceActionBusy = false
 			if err != nil {
-				a.toast("error", "Couldn't "+action.String()+" "+name+": run as administrator")
+				a.toast("error", "Couldn't "+action.String()+" "+name+": "+actionError(err))
+			} else {
+				a.toast("success", "Request to "+action.String()+" "+name+" accepted")
 			}
-			a.refreshServices(0)
+			if a.servicesBusy {
+				a.serviceReloadPending = true
+			} else {
+				a.refreshServices(0)
+			}
 		})
 	}()
+}
+
+func actionError(err error) string {
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		return "access denied; try running as administrator"
+	}
+	return strings.TrimSpace(err.Error())
 }
 
 var startupCols = [...]column{
@@ -181,10 +200,10 @@ func (a *App) startupPage(c *ui.Context, k *colors) {
 			a.openRun()
 		}
 		separator(c, k)
-		if commandButton(c, k, command{icon: icEnable, label: "Enable", enabled: item != nil && !item.Enabled, compact: compact}) {
+		if commandButton(c, k, command{icon: icEnable, label: "Enable", enabled: !a.startupActionBusy && item != nil && !item.Enabled, compact: compact}) {
 			a.setStartupEnabled(true)
 		}
-		if commandButton(c, k, command{icon: icDisable, label: "Disable", enabled: item != nil && item.Enabled, compact: compact}) {
+		if commandButton(c, k, command{icon: icDisable, label: "Disable", enabled: !a.startupActionBusy && item != nil && item.Enabled, compact: compact}) {
 			a.setStartupEnabled(false)
 		}
 		if commandButton(c, k, command{icon: icProperties, label: "Properties", enabled: item != nil, compact: compact}) {
@@ -286,13 +305,36 @@ func (a *App) startupRow(c *ui.Context, k *colors, it *sys.StartupItem, i int, c
 
 func (a *App) setStartupEnabled(on bool) {
 	it := a.startupItem()
-	if it == nil {
+	if it == nil || a.startupActionBusy {
 		return
 	}
-	if it.SetEnabled(on) != nil {
-		a.toast("error", "Couldn't change it: this one needs administrator rights")
+	item := *it
+	verb := "disable"
+	if on {
+		verb = "enable"
 	}
-	a.dirty = true
+	a.startupActionBusy = true
+	a.toast("info", "Working to "+verb+" "+item.Name+"…")
+	go func() {
+		err := item.SetEnabled(on)
+		a.post(func() {
+			a.startupActionBusy = false
+			if err != nil {
+				a.toast("error", "Couldn't "+verb+" "+item.Name+": "+actionError(err))
+			} else {
+				state := "Disabled"
+				if on {
+					state = "Enabled"
+				}
+				a.toast("success", state+" "+item.Name)
+			}
+			if a.startupBusy {
+				a.startupReloadPending = true
+			} else {
+				a.readStartup()
+			}
+		})
+	}()
 }
 
 var historyCols = [...]column{

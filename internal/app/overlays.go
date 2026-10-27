@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -48,6 +49,9 @@ func (a *App) processMenu(m *ui.Menu) {
 	p := &a.sampler.Procs[r.Proc]
 	if m.Item("Create memory dump file").Chosen() {
 		a.createDump(p.PID, p.Info.Name)
+	}
+	if a.dumpWhere != "" && m.Item("Open last dump file location").Chosen() {
+		a.openLocation(a.dumpWhere)
 	}
 	m.Separator()
 	if m.Item("Go to details").Chosen() {
@@ -97,6 +101,9 @@ func (a *App) detailsMenu(m *ui.Menu) {
 	if m.Item("Create memory dump file").Chosen() {
 		a.createDump(pid, name)
 	}
+	if a.dumpWhere != "" && m.Item("Open last dump file location").Chosen() {
+		a.openLocation(a.dumpWhere)
+	}
 	if m.Item("Open file location").Chosen() {
 		a.openLocation(path)
 	}
@@ -118,13 +125,13 @@ func (a *App) serviceMenu(m *ui.Menu) {
 	}
 	a.copyMenu(m)
 	running := s.State == sys.ServiceRunning
-	if m.Item("Start").Disabled(running).Chosen() {
+	if m.Item("Start").Disabled(a.serviceActionBusy || running).Chosen() {
 		a.controlService(sys.ServiceStart)
 	}
-	if m.Item("Stop").Disabled(!running).Chosen() {
+	if m.Item("Stop").Disabled(a.serviceActionBusy || !running).Chosen() {
 		a.controlService(sys.ServiceStop)
 	}
-	if m.Item("Restart").Disabled(!running).Chosen() {
+	if m.Item("Restart").Disabled(a.serviceActionBusy || !running).Chosen() {
 		a.controlService(sys.ServiceRestart)
 	}
 	m.Separator()
@@ -146,10 +153,10 @@ func (a *App) startupMenu(m *ui.Menu) {
 	}
 	a.copyMenu(m)
 	if it.Enabled {
-		if m.Item("Disable").Chosen() {
+		if m.Item("Disable").Disabled(a.startupActionBusy).Chosen() {
 			a.setStartupEnabled(false)
 		}
-	} else if m.Item("Enable").Chosen() {
+	} else if m.Item("Enable").Disabled(a.startupActionBusy).Chosen() {
 		a.setStartupEnabled(true)
 	}
 	m.Separator()
@@ -215,6 +222,9 @@ func (a *App) userProcMenu(m *ui.Menu) {
 
 // viewMenu is the Processes page's View menu.
 func (a *App) viewMenu(m *ui.Menu) {
+	if a.dumpWhere != "" && m.Item("Open last dump file location").Chosen() {
+		a.openLocation(a.dumpWhere)
+	}
 	if m.Item("Group by type").Checked(a.set.GroupByType).Chosen() {
 		a.set.GroupByType = !a.set.GroupByType
 		a.dirty = true
@@ -355,11 +365,15 @@ func (a *App) openRun() {
 func (a *App) dialogs(c *ui.Context, k *colors) {
 	a.runDialog(c, k)
 	if a.confirmEnd {
+		message := "If an open program is associated with this process, it will close and you will lose any unsaved data. If you end a system process, it might result in system instability."
+		if len(a.confirmPIDs) > 1 {
+			message = fmt.Sprintf("This will end %d processes. ", len(a.confirmPIDs)) + message
+		}
 		switch ui.AlertDialog(c, &a.confirmEnd, "Do you want to end "+a.confirmTitle+"?",
-			"If an open program is associated with this process, it will close and you will lose any unsaved data. If you end a system process, it might result in system instability.",
+			message,
 			"Cancel", "End process") {
 		case 1:
-			a.endProcesses(a.confirmPIDs, a.confirmTitle)
+			a.endProcessesChecked(a.confirmPIDs, a.confirmCreated, a.confirmTitle)
 		}
 	}
 	a.efficiencyDialog(c, k)

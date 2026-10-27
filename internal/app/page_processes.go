@@ -323,8 +323,8 @@ func (a *App) selectedIsExplorer() bool {
 	return r != nil && a.isExplorer(a.sampler.Procs[r.Proc].PID)
 }
 
-// endSelected ends what's selected: at once for apps and background
-// processes; a Windows process asks first; Windows Explorer restarts.
+// endSelected confirms when configured; Windows processes always ask and
+// Windows Explorer's command restarts it.
 func (a *App) endSelected() {
 	r := a.selectedRow()
 	if r == nil {
@@ -341,9 +341,8 @@ func (a *App) endSelected() {
 			critical = true
 		}
 	}
-	a.confirmPIDs, a.confirmTitle = pids, r.Title
-	if r.Category == CatWindows || critical {
-		a.confirmEnd = true
+	if a.set.AskEndTask || r.Category == CatWindows || critical {
+		a.confirmProcesses(pids, r.Title)
 		return
 	}
 	a.endProcesses(pids, r.Title)

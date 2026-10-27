@@ -26,6 +26,7 @@ type Settings struct {
 	MinimizeOnUse   bool
 	HideMinimized   bool
 	AskEfficiency   bool
+	AskEndTask      bool
 	FullAccountName bool
 	HistoryAll      bool
 	KernelTimes     bool
@@ -37,7 +38,7 @@ type Settings struct {
 }
 
 func defaultSettings() Settings {
-	return Settings{Speed: SpeedNormal, GroupByType: true, NavOpen: true, ProcColumns: procDefault, DetailColumns: detailDefault, AskEfficiency: true,
+	return Settings{Speed: SpeedNormal, GroupByType: true, NavOpen: true, ProcColumns: procDefault, DetailColumns: detailDefault, AskEfficiency: true, AskEndTask: true,
 		ProcAscending: true, DetailsAscending: true, ServicesAscending: true, StartupAscending: true, HistoryAscending: true}
 }
 
@@ -78,6 +79,9 @@ func (s *Settings) fields() []struct {
 		{key: "minimize_on_use", b: &s.MinimizeOnUse},
 		{key: "hide_when_minimized", b: &s.HideMinimized},
 		{key: "ask_efficiency", b: &s.AskEfficiency},
+		// The initial preview wrote an off-by-default ask_end_task value even
+		// when the user never changed it. Start this preference on for upgrades.
+		{key: "confirm_end_task", b: &s.AskEndTask},
 		{key: "full_account_name", b: &s.FullAccountName},
 		{key: "history_all", b: &s.HistoryAll},
 		{key: "kernel_times", b: &s.KernelTimes},

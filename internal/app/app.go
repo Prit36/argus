@@ -259,6 +259,7 @@ type App struct {
 	runFocus          bool
 	confirmEnd        bool
 	confirmPIDs       []uint32
+	confirmCreated    []int64
 	confirmTitle      string
 	confirmEfficiency bool
 	confirmUser       userAction
@@ -268,13 +269,17 @@ type App struct {
 	affinityMask      uint64
 	toasts            []ui.Toast
 
-	icons     iconCache
-	scale     float32
-	dumpState atomic.Uint32
-	dumpWhere string
-	trayKey   int
-	trayText  string
-	pendingUI atomic.Bool
+	icons                iconCache
+	scale                float32
+	dumpState            atomic.Uint32
+	dumpWhere            string
+	serviceActionBusy    bool
+	serviceReloadPending bool
+	startupActionBusy    bool
+	startupReloadPending bool
+	trayKey              int
+	trayText             string
+	pendingUI            atomic.Bool
 }
 
 type userAction uint8
@@ -609,6 +614,10 @@ func (a *App) refreshServices(every time.Duration) {
 		a.post(func() {
 			a.servicesBusy = false
 			a.servicesAt = time.Now()
+			if a.serviceReloadPending {
+				a.serviceReloadPending = false
+				a.refreshServices(0)
+			}
 			if list != nil {
 				if list == a.services {
 					return // Same immutable snapshot; cached rows remain valid.
@@ -659,6 +668,10 @@ func (a *App) readStartup() {
 				}
 			}
 			a.dirty = true
+			if a.startupReloadPending {
+				a.startupReloadPending = false
+				a.readStartup()
+			}
 		})
 	}()
 }

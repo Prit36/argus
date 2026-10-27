@@ -51,18 +51,42 @@ func (a *App) critical(pid uint32) bool {
 
 // endProcesses ends each of pids; says how many it could and couldn't.
 func (a *App) endProcesses(pids []uint32, title string) {
+	a.endProcessesChecked(pids, nil, title)
+}
+
+// Record identities before a confirmation, since Windows can reuse a PID.
+func (a *App) confirmProcesses(pids []uint32, title string) {
+	a.confirmPIDs, a.confirmTitle, a.confirmEnd = pids, title, true
+	a.confirmCreated = make([]int64, len(pids))
+	for i, pid := range pids {
+		a.confirmCreated[i] = -1
+		if p := a.sampler.ByPID(pid); p != nil && p.Info != nil {
+			a.confirmCreated[i] = p.Info.CreateTime
+		}
+	}
+}
+
+func (a *App) endProcessesChecked(pids []uint32, created []int64, title string) {
 	done, denied := 0, 0
-	for _, pid := range pids {
+	for i, pid := range pids {
 		if pid == a.sampler.SelfPID || a.critical(pid) {
 			denied++
 			continue
 		}
-		h, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid)
+		access := uint32(windows.PROCESS_TERMINATE)
+		if created != nil {
+			access |= windows.PROCESS_QUERY_LIMITED_INFORMATION
+		}
+		h, err := windows.OpenProcess(access, false, pid)
 		if err != nil {
 			denied++
 			continue
 		}
-		if windows.TerminateProcess(h, 1) == nil {
+		valid := true
+		if created != nil {
+			valid = i < len(created) && processMatches(h, created[i])
+		}
+		if valid && windows.TerminateProcess(h, 1) == nil {
 			done++
 		} else {
 			denied++
@@ -73,12 +97,19 @@ func (a *App) endProcesses(pids []uint32, title string) {
 	case denied == 0:
 		a.toast("success", "Ended "+title)
 	case done == 0:
-		a.toast("error", "Couldn't end "+title+": access denied")
+		a.toast("error", "Couldn't end "+title+": the process may have exited or access was denied")
 	default:
 		a.toast("warning", fmt.Sprintf("Ended %d of %d processes of %s", done, done+denied, title))
 	}
 	// Sample again to show it gone.
 	a.sample()
+}
+
+func processMatches(h windows.Handle, expected int64) bool {
+	var start, exit, kernel, user windows.Filetime
+	err := windows.GetProcessTimes(h, &start, &exit, &kernel, &user)
+	actual := uint64(start.HighDateTime)<<32 | uint64(start.LowDateTime)
+	return expected >= 0 && err == nil && actual == uint64(expected)
 }
 
 // efficiencyOn reports whether pid is in efficiency mode (EcoQoS).
@@ -333,42 +364,63 @@ const (
 	dumpWriting
 )
 
-// createDump writes a full memory dump of pid to the temporary folder as
-// NAME.DMP, as Task Manager's "Create memory dump file", on a goroutine.
+// createDump writes a uniquely named full memory dump on a worker.
 func (a *App) createDump(pid uint32, name string) {
 	if !a.dumpState.CompareAndSwap(dumpNone, dumpWriting) {
 		a.toast("warning", "A dump file is already being written")
 		return
 	}
-	base := strings.TrimSuffix(name, filepath.Ext(name))
-	where := filepath.Join(os.TempDir(), base+".DMP")
 	a.toast("info", "Writing the dump file")
 	go func() {
-		ok := writeDump(pid, where)
+		where, err := writeDump(pid, name)
 		a.post(func() {
 			a.dumpState.Store(dumpNone)
-			if ok {
+			if err == nil {
+				a.dumpWhere = where
 				a.toast("success", "Dump file written: "+where)
 			} else {
-				a.toast("error", "Couldn't write the dump file: access denied")
+				a.toast("error", "Couldn't write the dump file: "+actionError(err))
 			}
 		})
 	}()
 }
 
-func writeDump(pid uint32, where string) bool {
+func writeDump(pid uint32, name string) (string, error) {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, false, pid)
 	if err != nil {
-		return false
+		return "", err
 	}
 	defer windows.CloseHandle(h)
-	f, err := windows.CreateFile(windows.StringToUTF16Ptr(where), windows.GENERIC_WRITE, 0, nil, windows.CREATE_ALWAYS, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	f, err := createDumpFile(name)
 	if err != nil {
-		return false
+		return "", err
 	}
-	defer windows.CloseHandle(f)
+	where := f.Name()
 	// MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithThreadInfo.
-	return winapi.MiniDumpWriteDump(h, pid, f, 0x2|0x4|0x1000)
+	ok := winapi.MiniDumpWriteDump(h, pid, windows.Handle(f.Fd()), 0x2|0x4|0x1000)
+	closeErr := f.Close()
+	if !ok || closeErr != nil {
+		os.Remove(where)
+		if closeErr != nil {
+			return "", closeErr
+		}
+		return "", fmt.Errorf("Windows could not write the dump")
+	}
+	return where, nil
+}
+
+func createDumpFile(name string) (*os.File, error) {
+	base := strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
+	base = strings.Map(func(r rune) rune {
+		if r < 32 || strings.ContainsRune(`<>:"/\|?*`, r) {
+			return '_'
+		}
+		return r
+	}, base)
+	if base == "" || base == "." {
+		base = "process"
+	}
+	return os.CreateTemp("", base+"-*.dmp")
 }
 
 // affinity reads the processors pid may run on, and the machine's.

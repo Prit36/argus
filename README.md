@@ -23,6 +23,15 @@ and Settings, plus the tray CPU meter.
   as tab-separated text. On Performance, Ctrl+C copies the machine summary.
 - Switching directly to a process's details or services clears the target
   page's filter so the selection is visible.
+- Service and startup actions report progress and the Windows error when
+  available. A service request being accepted does not necessarily mean the
+  service has finished changing state.
+- Memory dumps get unique names in the temporary folder. After creating one,
+  use Processes → View → Open last dump file location, or the process menu,
+  to find it.
+- By default, ending apps and background processes asks for confirmation; this
+  can be turned off in Settings. The dialog
+  identifies grouped tasks and checks process identity before ending them.
 
 ## Build
 

@@ -310,10 +310,10 @@ func (a *App) endUserProc() {
 	if p == nil {
 		return
 	}
-	a.confirmPIDs, a.confirmTitle = []uint32{p.PID}, p.Info.Title()
-	if a.critical(p.PID) || p.Session == 0 {
-		a.confirmEnd = true
+	pids := []uint32{p.PID}
+	if a.set.AskEndTask || a.critical(p.PID) || p.Session == 0 {
+		a.confirmProcesses(pids, p.Info.Title())
 		return
 	}
-	a.endProcesses(a.confirmPIDs, a.confirmTitle)
+	a.endProcesses(pids, p.Info.Title())
 }

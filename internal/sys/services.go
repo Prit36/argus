@@ -1,7 +1,7 @@
 package sys
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unsafe"
@@ -238,40 +238,50 @@ func (a ServiceAction) String() string {
 	return "restart"
 }
 
-// ErrAccessDenied is what Windows says without administrator rights.
-var ErrAccessDenied = errors.New("access denied")
-
 // ControlService starts, stops or restarts service name. A restart waits
 // for the service to stop: call it off the UI thread.
 func ControlService(name string, action ServiceAction) error {
 	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
-		return ErrAccessDenied
+		return err
 	}
 	defer windows.CloseServiceHandle(scm)
-	h, err := windows.OpenService(scm, windows.StringToUTF16Ptr(name), windows.SERVICE_START|windows.SERVICE_STOP|windows.SERVICE_QUERY_STATUS)
+	access := uint32(windows.SERVICE_QUERY_STATUS)
+	if action == ServiceStart || action == ServiceRestart {
+		access |= windows.SERVICE_START
+	}
+	if action == ServiceStop || action == ServiceRestart {
+		access |= windows.SERVICE_STOP
+	}
+	h, err := windows.OpenService(scm, windows.StringToUTF16Ptr(name), access)
 	if err != nil {
-		return ErrAccessDenied
+		return err
 	}
 	defer windows.CloseServiceHandle(h)
 	if action == ServiceStop || action == ServiceRestart {
 		var st windows.SERVICE_STATUS
-		if err := windows.ControlService(h, windows.SERVICE_CONTROL_STOP, &st); err != nil && action == ServiceStop {
-			return err
+		if err := windows.ControlService(h, windows.SERVICE_CONTROL_STOP, &st); err != nil {
+			if action != ServiceRestart || err != windows.ERROR_SERVICE_NOT_ACTIVE {
+				return err
+			}
+		}
+		if action == ServiceRestart {
+			for tries := 0; ; tries++ {
+				if err := windows.QueryServiceStatus(h, &st); err != nil {
+					return err
+				}
+				if st.CurrentState == windows.SERVICE_STOPPED {
+					break
+				}
+				if tries >= 100 {
+					return fmt.Errorf("timed out waiting for the service to stop")
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 	if action == ServiceStart || action == ServiceRestart {
-		// A restart: give the service a moment to stop first.
-		for tries := 0; ; tries++ {
-			err := windows.StartService(h, 0, nil)
-			if err == nil || err == windows.ERROR_SERVICE_ALREADY_RUNNING {
-				return nil
-			}
-			if action != ServiceRestart || tries > 20 {
-				return err
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		return windows.StartService(h, 0, nil)
 	}
 	return nil
 }
