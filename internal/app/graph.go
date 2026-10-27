@@ -13,6 +13,13 @@ import (
 // across graphs and frames, without retaining one path per CPU tile.
 var graphPaths = sync.Pool{New: func() any { return new(ui.Path) }}
 
+var (
+	graphLightGrid = ui.Hex("#e7e7e7")
+	graphDarkGrid  = ui.Hex("#2c2c2c")
+	graphLightEdge = ui.Hex("#a6a6a6")
+	graphDarkEdge  = ui.Hex("#757575")
+)
+
 // Task Manager's graphs: the last minute of a figure, newest at the right,
 // as a thin line over a lightly filled area. Neutral grids and borders
 // keep the chart's structure separate from its series color.
@@ -47,21 +54,20 @@ func graph(c *ui.Context, k *colors, ss []series, o graphOptions) {
 	} else {
 		e.FillWidth()
 	}
-	bg := k.graphBG
-	gridColor := ui.Hex("#e7e7e7")
-	fill := o.color.Alpha(0.14)
-	deep := o.color.Alpha(0.34)
-	edge := ui.Hex("#a6a6a6")
-	if k.dark {
-		gridColor, fill, deep, edge = ui.Hex("#2c2c2c"), o.color.Alpha(0.18), o.color.Alpha(0.4), ui.Hex("#757575")
-	}
-	if o.mini {
-		edge = o.color.Alpha(0.7)
-	}
+	bg, dark := k.graphBG, k.dark
 	// The series are copied: the drawing may run after the view returns.
 	var ringsBuf [2]series
 	rings := append(ringsBuf[:0], ss...)
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
+		gridColor, edge := graphLightGrid, graphLightEdge
+		fill, deep := o.color.Alpha(0.14), o.color.Alpha(0.34)
+		if dark {
+			gridColor, edge = graphDarkGrid, graphDarkEdge
+			fill, deep = o.color.Alpha(0.18), o.color.Alpha(0.4)
+		}
+		if o.mini {
+			edge = o.color.Alpha(0.7)
+		}
 		w := float32(math.Round(float64(r.W)))
 		if w <= 2 {
 			return

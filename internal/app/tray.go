@@ -20,9 +20,7 @@ import (
 // trayIcons are the meter's PNGs, made once per filled pixel row and size.
 var trayIcons = map[int][]byte{}
 
-// A PNG encoder otherwise allocates ~830 KB of compression scratch for
-// every new meter level. The tray is UI-thread-only: reuse one encoder
-// buffer across all levels and DPI sizes.
+// The tray is UI-thread-only: reuse the PNG encoder's buffer across levels.
 type trayBufferPool struct{ buffer *png.EncoderBuffer }
 
 func (p *trayBufferPool) Get() *png.EncoderBuffer {
@@ -33,7 +31,15 @@ func (p *trayBufferPool) Get() *png.EncoderBuffer {
 
 func (p *trayBufferPool) Put(b *png.EncoderBuffer) { p.buffer = b }
 
-var trayEncoder = png.Encoder{CompressionLevel: png.BestSpeed, BufferPool: &trayBufferPool{}}
+// The four-color icon stays compact as an indexed PNG. Skipping compression
+// avoids retaining the much larger fast-compressor scratch buffer.
+var trayEncoder = png.Encoder{CompressionLevel: png.NoCompression, BufferPool: &trayBufferPool{}}
+var trayPalette = color.Palette{
+	color.NRGBA{},
+	color.NRGBA{0x8a, 0x8a, 0x8a, 0xff},
+	color.NRGBA{0x2e, 0xb8, 0x2e, 0xff},
+	color.NRGBA{0x1c, 0x1c, 0x1c, 0xff},
+}
 
 func (a *App) trayPx() int {
 	scale := float64(1)
@@ -51,22 +57,19 @@ func meter(px, level int) []byte {
 	if b, ok := trayIcons[key]; ok {
 		return b
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, px, px))
+	img := image.NewPaletted(image.Rect(0, 0, px, px), trayPalette)
 	inset := px / 8
 	left, right := inset, px-inset
 	fillTop := px - inset - (key & 0xff) - 1
-	edge := color.NRGBA{0x8a, 0x8a, 0x8a, 0xff}
-	fill := color.NRGBA{0x2e, 0xb8, 0x2e, 0xff} // Task Manager's green
-	empty := color.NRGBA{0x1c, 0x1c, 0x1c, 0xff}
 	for y := inset; y < px-inset; y++ {
 		for x := left; x < right; x++ {
 			switch {
 			case y == inset || y == px-inset-1 || x == left || x == right-1:
-				img.SetNRGBA(x, y, edge)
+				img.SetColorIndex(x, y, 1)
 			case y >= fillTop:
-				img.SetNRGBA(x, y, fill)
+				img.SetColorIndex(x, y, 2)
 			default:
-				img.SetNRGBA(x, y, empty)
+				img.SetColorIndex(x, y, 3)
 			}
 		}
 	}
