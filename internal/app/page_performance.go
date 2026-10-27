@@ -171,19 +171,32 @@ func mainHeight(c *ui.Context) float32 {
 // list on the right, stacked when the pane is narrow.
 func (a *App) figures(c *ui.Context, left, right func()) {
 	w, _ := c.Size()
-	pane := w - a.navWidth(w) - 280
+	room := w - a.navWidth(w)
+	sidebar := float32(math.Round(float64(min(max(room*0.27, 192), 260))))
+	pane := room - sidebar - 2*pagePad
+	leftWidth := float32(288)
+	if a.perfTab.Kind == PerfCPU {
+		leftWidth = 300
+	} else if a.perfTab.Kind == PerfNet {
+		leftWidth = 144
+	}
 	r := ui.Row(c).FillWidth().Gap(24).Padding(12, 0, 0, 0)
-	if pane < 520 {
-		r.Column()
+	narrow := pane < leftWidth+220
+	if narrow {
+		r.Column().AlignItems(ui.Start)
 	}
 	r.Children(func() {
-		ui.Column(c).Gap(4).Shrink(0).Children(left)
-		ui.Column(c).Grow(1).MinWidth(0).Children(right)
+		ui.Column(c).Width(leftWidth).MaxWidth(pane).Gap(4).Shrink(0).Clip().Children(left)
+		details := ui.Column(c).Grow(1).MinWidth(0)
+		if narrow {
+			details.FillWidth()
+		}
+		details.Children(right)
 	})
 }
 
 func statRow(c *ui.Context, fn func()) {
-	ui.Row(c).Children(fn)
+	ui.Row(c).FillWidth().Wrap().Children(fn)
 }
 
 func (a *App) cpuDetail(c *ui.Context, k *colors) {
@@ -191,7 +204,7 @@ func (a *App) cpuDetail(c *ui.Context, k *colors) {
 	detailTitle(c, k, "CPU", info.Name)
 	label := "% Utilization"
 	if a.set.CPULogical {
-		label = "% Utilization over 60 seconds"
+		label = "% Utilization over 60 samples"
 	}
 	graphLabels(c, k, label, "100%")
 	gh := mainHeight(c)
@@ -221,19 +234,19 @@ func (a *App) cpuDetail(c *ui.Context, k *colors) {
 		}
 		graph(c, k, ss, graphOptions{height: gh, color: k.cpu, max: 100, grid: true, samples: a.samples})
 	}
-	graphLabels(c, k, "60 seconds", "0")
+	graphLabels(c, k, "60 samples", "0")
 	a.figures(c, func() {
 		statRow(c, func() {
-			stat(c, k, "Utilization", fmtPercent(a.sampler.CPU*100))
-			stat(c, k, "Speed", fmtGHz(a.cpuGHz()))
+			statSized(c, k, "Utilization", fmtPercent(a.sampler.CPU*100), 100)
+			statSized(c, k, "Speed", fmtGHz(a.cpuGHz()), 100)
 		})
 		statRow(c, func() {
-			stat(c, k, "Processes", itoa(len(a.sampler.Procs)))
-			stat(c, k, "Threads", itoa(a.sampler.Threads))
-			stat(c, k, "Handles", itoa(a.sampler.Handles))
+			statSized(c, k, "Processes", itoa(len(a.sampler.Procs)), 100)
+			statSized(c, k, "Threads", itoa(a.sampler.Threads), 100)
+			statSized(c, k, "Handles", itoa(a.sampler.Handles), 100)
 		})
 		statRow(c, func() {
-			stat(c, k, "Up time", fmtUptime(sys.Uptime()))
+			statSized(c, k, "Up time", fmtUptime(sys.Uptime()), 300)
 		})
 	}, func() {
 		kv(c, k, "Base speed:", fmtGHz(float32(info.BaseMHz)/1000))
@@ -287,7 +300,7 @@ func (a *App) memoryDetail(c *ui.Context, k *colors) {
 	detailTitle(c, k, "Memory", fmtGB(installed))
 	graphLabels(c, k, "Memory usage", fmtGB(m.Total))
 	graph(c, k, []series{{ring: &a.histMem}}, graphOptions{height: float32(math.Round(float64(mainHeight(c) * 0.78))), color: k.memory, max: float32(max(1, m.Total)), grid: true, samples: a.samples})
-	graphLabels(c, k, "60 seconds", "0")
+	graphLabels(c, k, "60 samples", "0")
 	ui.Row(c).FillWidth().Height(24).Padding(4, 0, 0, 0).AlignItems(ui.End).Children(func() {
 		ui.Text(c, "Memory composition").FontSize(fontSmall).TextColor(k.secondary).NoWrap()
 	})
@@ -348,7 +361,7 @@ func (a *App) diskDetail(c *ui.Context, k *colors, d *sys.Disk) {
 	detailTitle(c, k, d.Title(), d.Model)
 	graphLabels(c, k, "Active time", "100%")
 	graph(c, k, []series{{ring: &d.HistActive}}, graphOptions{height: float32(math.Round(float64(mainHeight(c) * 0.62))), color: k.disk, max: 100, grid: true, samples: a.samples})
-	graphLabels(c, k, "60 seconds", "0")
+	graphLabels(c, k, "60 samples", "0")
 	top := niceMax(max(d.HistRead.Max(), d.HistWrite.Max()), 1<<20)
 	graphLabels(c, k, "Disk transfer rate", fmtRate(top))
 	graph(c, k, []series{{ring: &d.HistRead}, {ring: &d.HistWrite, dashed: true}}, graphOptions{height: float32(math.Round(float64(mainHeight(c) * 0.4))), color: k.disk, max: top, grid: true, samples: a.samples})
@@ -382,10 +395,10 @@ func yesNo(b bool) string {
 	return "No"
 }
 
-// spanLegend is "60 seconds", the legend, and "0", under a two-series graph.
+// spanLegend is the sample span, legend, and zero under a two-series graph.
 func spanLegend(c *ui.Context, k *colors, color ui.Color, first, second string) {
 	ui.Row(c).FillWidth().Height(20).AlignItems(ui.Center).Shrink(0).Children(func() {
-		ui.Text(c, "60 seconds").FontSize(fontSmall).TextColor(k.secondary).NoWrap()
+		ui.Text(c, "60 samples").FontSize(fontSmall).TextColor(k.secondary).NoWrap()
 		ui.Spacer(c)
 		legend(c, k, color, false, first)
 		legend(c, k, color, true, second)
@@ -400,13 +413,15 @@ func (a *App) netDetail(c *ui.Context, k *colors, n *sys.Adapter) {
 	graph(c, k, []series{{ring: &n.HistRecv}, {ring: &n.HistSend, dashed: true}}, graphOptions{height: mainHeight(c), color: k.network, max: top, grid: true, samples: a.samples})
 	spanLegend(c, k, k.network, "Receive", "Send")
 	a.figures(c, func() {
-		statRow(c, func() {
-			stat(c, k, "Send", fmtBits(n.Send))
-			stat(c, k, "Receive", fmtBits(n.Recv))
-		})
+		networkStat(c, k, "Send", fmtBits(n.Send), true)
+		networkStat(c, k, "Receive", fmtBits(n.Recv), false)
 	}, func() {
 		kv(c, k, "Adapter name:", n.Name)
-		kv(c, k, "Connection type:", n.Kind())
+		connection := n.Kind()
+		if n.WiFi && n.Connected && n.WiFiStandard != "" {
+			connection = n.WiFiStandard
+		}
+		kv(c, k, "Connection type:", connection)
 		if n.LinkSpeed > 0 {
 			kv(c, k, "Link speed:", fmtBits(float32(n.LinkSpeed)))
 		}
@@ -415,12 +430,53 @@ func (a *App) netDetail(c *ui.Context, k *colors, n *sys.Adapter) {
 			status = "Connected"
 		}
 		kv(c, k, "Status:", status)
-		if n.IPv4 != "" {
+		if n.Connected && n.IPv4 != "" {
 			kv(c, k, "IPv4 address:", n.IPv4)
 		}
-		if n.IPv6 != "" {
+		if n.Connected && n.IPv6 != "" {
 			kv(c, k, "IPv6 address:", n.IPv6)
 		}
+		if n.WiFi && n.Connected && n.WiFiDetails {
+			signalStrength(c, k, n.Signal)
+		}
+	})
+}
+
+func networkStat(c *ui.Context, k *colors, label, value string, dashed bool) {
+	ui.Row(c).Gap(8).Padding(0, 20, 8, 0).AlignItems(ui.Stretch).Children(func() {
+		ui.Box(c).Width(2).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+			if dashed {
+				for y := float32(0); y < r.H; y += 6 {
+					p.Fill(ui.Rect{X: r.X, Y: r.Y + y, W: r.W, H: min(3, r.H-y)}, k.network, 0)
+				}
+			} else {
+				p.Fill(r, k.network, 0)
+			}
+		})
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, label).FontSize(fontSmall).TextColor(k.secondary).NoWrap()
+			ui.Text(c, value).FontSize(fontSubtitle).FontWeight(600).TextColor(k.text).NoWrap()
+		})
+	})
+}
+
+func signalStrength(c *ui.Context, k *colors, quality uint32) {
+	quality = min(quality, 100)
+	value := itoa(quality) + "%"
+	ui.Row(c).FillWidth().Height(24).AlignItems(ui.Center).Gap(10).Label("Signal strength: " + value).Children(func() {
+		ui.Row(c).Width(148).Shrink(0).Children(func() {
+			ui.Text(c, "Signal strength:").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
+		})
+		ui.Row(c).AlignItems(ui.End).Gap(2).Tooltip(value).Children(func() {
+			for i := 0; i < 5; i++ {
+				color := k.network.Alpha(0.25)
+				if quality > uint32(i*20) {
+					color = k.network
+				}
+				ui.Box(c).Size(3, float32(4+i*3)).Background(color).Radius(1)
+			}
+		})
+		ui.Text(c, value).FontSize(fontCaption).FontWeight(600).TextColor(k.text).SingleLine()
 	})
 }
 

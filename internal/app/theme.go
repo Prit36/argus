@@ -17,7 +17,7 @@ const (
 	fontSmall    = 12   // secondary labels, column titles, axis labels
 	fontCaption  = 13.5 // table cells, figures, key-value lines
 	fontBody     = 14   // the nav, commands, fields, group headers
-	fontMetric   = 16   // column totals
+	fontMetric   = 18   // column totals
 	fontSubtitle = 20   // page titles, large figures
 	fontTitle    = 26   // the Performance page's part name
 )

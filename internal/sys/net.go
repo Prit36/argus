@@ -3,6 +3,7 @@ package sys
 import (
 	"net/netip"
 	"sort"
+	"strconv"
 	"time"
 	"unsafe"
 
@@ -26,6 +27,9 @@ type Adapter struct {
 	Send, Recv         float32
 	HistSend, HistRecv Ring
 	IPv4, IPv6         string
+	WiFiStandard       string
+	Signal             uint32
+	WiFiDetails        bool
 	seen               bool
 }
 
@@ -35,6 +39,16 @@ func (a *Adapter) Kind() string {
 		return "Wi-Fi"
 	}
 	return "Ethernet"
+}
+
+func (a *Adapter) setConnected(connected bool) {
+	if a.Connected != connected {
+		a.IPv4, a.IPv6, a.WiFiStandard = "", "", ""
+		a.Signal, a.WiFiDetails = 0, false
+		a.Send, a.Recv = 0, 0
+		a.prevTime = time.Time{}
+	}
+	a.Connected = connected
 }
 
 // Net is the machine's network adapters: found with GetIfTable2 now and
@@ -87,7 +101,7 @@ func (n *Net) find() {
 		}
 		a.seen = true
 		a.WiFi = r.Type == 71
-		a.Connected = r.OperStatus == 1
+		a.setConnected(r.OperStatus == 1)
 		a.LinkSpeed = r.ReceiveLinkSpeed
 		a.Name = utf16Cached(a.Name, r.Alias[:])
 		a.Description = utf16Cached(a.Description, r.Description[:])
@@ -135,12 +149,14 @@ func (n *Net) Sample(now time.Time) {
 			continue
 		}
 		r := &n.row
-		a.Connected = r.OperStatus == 1
+		a.setConnected(r.OperStatus == 1)
 		a.LinkSpeed = r.ReceiveLinkSpeed
-		if !a.prevTime.IsZero() && now.After(a.prevTime) {
+		if a.Connected && !a.prevTime.IsZero() && now.After(a.prevTime) {
 			dt := now.Sub(a.prevTime).Seconds()
 			a.Recv = float32(float64(sub(r.InOctets, a.prevIn)) * 8 / dt)
 			a.Send = float32(float64(sub(r.OutOctets, a.prevOut)) * 8 / dt)
+		} else {
+			a.Send, a.Recv = 0, 0
 		}
 		a.prevIn, a.prevOut, a.prevTime = r.InOctets, r.OutOctets, now
 		a.HistRecv.Push(a.Recv)
@@ -162,13 +178,21 @@ func (n *Net) Load() float32 {
 
 // AdapterAddress is an adapter's first IPv4 and IPv6 address.
 type AdapterAddress struct {
-	LUID       uint64
-	IPv4, IPv6 string
+	LUID         uint64
+	IPv4, IPv6   string
+	WiFiStandard string
+	Signal       uint32
+	WiFiDetails  bool
 }
 
-// ReadAddresses reads each adapter's first IPv4 and IPv6 address. It can
-// take a while (the TCP/IP stack's lock): call it off the UI thread.
+// ReadAddresses reads adapter IP addresses. It can take a while (the TCP/IP
+// stack's lock): call it off the UI thread.
 func ReadAddresses() []AdapterAddress {
+	return readNetworkDetails(false)
+}
+
+// readNetworkDetails optionally includes Wi-Fi connection attributes.
+func readNetworkDetails(wifi bool) []AdapterAddress {
 	size := uint32(32 * 1024)
 	var buf []uint64
 	for {
@@ -184,7 +208,7 @@ func ReadAddresses() []AdapterAddress {
 		}
 		break
 	}
-	var out []AdapterAddress
+	out := make([]AdapterAddress, 0)
 	for aa := (*windows.IpAdapterAddresses)(unsafe.Pointer(&buf[0])); aa != nil; aa = aa.Next {
 		ad := AdapterAddress{LUID: aa.Luid}
 		for u := aa.FirstUnicastAddress; u != nil; u = u.Next {
@@ -199,13 +223,21 @@ func ReadAddresses() []AdapterAddress {
 					ad.IPv4 = netip.AddrFrom4(p.Addr).String()
 				}
 			case windows.AF_INET6:
-				if ad.IPv6 == "" {
-					p := (*windows.RawSockaddrInet6)(unsafe.Pointer(sa))
-					ad.IPv6 = netip.AddrFrom16(p.Addr).String()
+				p := (*windows.RawSockaddrInet6)(unsafe.Pointer(sa))
+				ip := netip.AddrFrom16(p.Addr)
+				if ip.IsLinkLocalUnicast() && p.Scope_id != 0 {
+					ip = ip.WithZone(strconv.FormatUint(uint64(p.Scope_id), 10))
+				}
+				old, _ := netip.ParseAddr(ad.IPv6)
+				if ad.IPv6 == "" || (old.IsLinkLocalUnicast() && !ip.IsLinkLocalUnicast()) {
+					ad.IPv6 = ip.String()
 				}
 			}
 		}
 		out = append(out, ad)
+	}
+	if wifi {
+		readWiFi(out)
 	}
 	return out
 }

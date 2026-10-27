@@ -12,6 +12,7 @@ type PerfWorker struct {
 	enabled     bool
 	gpuPending  bool
 	addrPending bool
+	wifiPending bool
 	quitting    bool
 	wake        chan struct{}
 	done        chan struct{}
@@ -50,10 +51,11 @@ func (w *PerfWorker) RequestGPU(enabled, sample bool) {
 	}
 }
 
-// RequestAddresses asks for the adapters' addresses.
-func (w *PerfWorker) RequestAddresses() {
+// RequestAddresses asks for adapter addresses and, when needed, Wi-Fi details.
+func (w *PerfWorker) RequestAddresses(wifi bool) {
 	w.mu.Lock()
 	w.addrPending = true
+	w.wifiPending = w.wifiPending || wifi
 	w.mu.Unlock()
 	w.signal()
 }
@@ -74,8 +76,8 @@ func (w *PerfWorker) run() {
 	for range w.wake {
 		w.mu.Lock()
 		quitting, enabled := w.quitting, w.enabled
-		sample, addrs := w.gpuPending, w.addrPending
-		w.gpuPending, w.addrPending = false, false
+		sample, addrs, wifi := w.gpuPending, w.addrPending, w.wifiPending
+		w.gpuPending, w.addrPending, w.wifiPending = false, false, false
 		w.mu.Unlock()
 		if quitting {
 			return
@@ -88,7 +90,7 @@ func (w *PerfWorker) run() {
 		}
 		var addresses []AdapterAddress
 		if addrs {
-			addresses = ReadAddresses()
+			addresses = readNetworkDetails(wifi)
 		}
 		// Discard a reading if the page was left while PDH was busy.
 		w.mu.Lock()

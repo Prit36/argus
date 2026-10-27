@@ -12,7 +12,7 @@ import (
 
 const (
 	rowH           = 32
-	headerH        = 58
+	headerH        = 56
 	compactHeaderH = 38
 	pagePad        = 24
 	pageHeaderH    = 52
@@ -316,9 +316,13 @@ func kv(c *ui.Context, k *colors, label, value string) {
 
 // stat is a big figure under its label, as the Performance page's.
 func stat(c *ui.Context, k *colors, label, value string) {
-	ui.Column(c).Gap(2).MinWidth(96).Padding(0, 20, 10, 0).Shrink(0).Children(func() {
-		ui.Text(c, label).FontSize(fontSmall).TextColor(k.secondary).NoWrap()
-		ui.Text(c, value).FontSize(fontSubtitle).FontWeight(600).TextColor(k.text).NoWrap()
+	statSized(c, k, label, value, 144)
+}
+
+func statSized(c *ui.Context, k *colors, label, value string, width float32) {
+	ui.Column(c).Width(width).Gap(2).Padding(0, 12, 10, 0).Shrink(0).Clip().Tooltip(value).Children(func() {
+		ui.Text(c, label).FontSize(fontSmall).TextColor(k.secondary).SingleLine()
+		ui.Text(c, value).FontSize(fontSubtitle).FontWeight(600).TextColor(k.text).SingleLine()
 	})
 }
 

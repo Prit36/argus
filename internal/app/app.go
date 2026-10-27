@@ -251,7 +251,8 @@ type App struct {
 	historyRows  []int32
 	historyList  ui.ListState
 
-	perfTab PerfTab
+	perfTab            PerfTab
+	lastNetworkDetails time.Time
 
 	// Dialogs.
 	runOpen           bool
@@ -432,7 +433,27 @@ func (a *App) sample() {
 	}
 	a.histMem.Push(float32(a.mem.Used()))
 	a.disks.Sample()
+	// The adapter list can be re-sorted when a connection changes. Keep the
+	// selected adapter, rather than silently switching to a different one.
+	var selectedNet *sys.Adapter
+	var wasConnected bool
+	if a.perfTab.Kind == PerfNet && a.perfTab.Index < len(a.net.List) {
+		selectedNet = a.net.List[a.perfTab.Index]
+		wasConnected = selectedNet.Connected
+	}
 	a.net.Sample(now)
+	if selectedNet != nil {
+		if i := slices.Index(a.net.List, selectedNet); i >= 0 {
+			a.perfTab.Index = i
+		} else {
+			a.perfTab = PerfTab{}
+		}
+	}
+	if a.page == PagePerformance && a.perfTab.Kind == PerfNet && a.shown() {
+		if (selectedNet != nil && selectedNet.Connected != wasConnected) || now.Sub(a.lastNetworkDetails) >= 5*time.Second {
+			a.requestAddresses()
+		}
+	}
 	a.syncPerformance(true)
 	a.mergeGPU()
 	if a.win != nil {
@@ -498,15 +519,23 @@ func (a *App) deliverPerformance(r *sys.GPUReading, addrs []sys.AdapterAddress) 
 	a.post(func() {
 		if r != nil {
 			a.takeGPU(r)
+			a.dirty = true
+		}
+		if addrs != nil {
+			for _, n := range a.net.List {
+				n.IPv4, n.IPv6, n.WiFiStandard = "", "", ""
+				n.Signal, n.WiFiDetails = 0, false
+			}
 		}
 		for _, ad := range addrs {
 			for _, n := range a.net.List {
 				if n.LUID == ad.LUID {
 					n.IPv4, n.IPv6 = ad.IPv4, ad.IPv6
+					n.WiFiStandard, n.Signal = ad.WiFiStandard, ad.Signal
+					n.WiFiDetails = ad.WiFiDetails
 				}
 			}
 		}
-		a.dirty = true
 	})
 }
 
@@ -548,14 +577,20 @@ func (a *App) mergeGPU() {
 	}
 }
 
+func (a *App) selectedWiFiConnected() bool {
+	i := a.perfTab.Index
+	return a.perfTab.Kind == PerfNet && i >= 0 && i < len(a.net.List) && a.net.List[i].WiFi && a.net.List[i].Connected
+}
+
 func (a *App) requestAddresses() {
 	if a.hardware != nil && !a.hardwareReady {
 		return
 	}
+	a.lastNetworkDetails = time.Now()
 	if a.perf == nil {
 		a.perf = sys.NewPerfWorker(a.gpus, a.deliverPerformance)
 	}
-	a.perf.RequestAddresses()
+	a.perf.RequestAddresses(a.selectedWiFiConnected())
 }
 
 // mergeNetwork puts each process's network use since the last sample on
