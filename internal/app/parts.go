@@ -98,6 +98,30 @@ type column struct {
 	totalHeat float32
 }
 
+// applyColumnWidths restores this page's user-sized columns and returns the
+// minimum width needed by the header and virtualized rows. Unchanged columns
+// keep their original flexible behavior.
+func (a *App) applyColumnWidths(cols []column, minW float32) (float32, float32) {
+	flexMin := minW - (pagePad - 10 + 14) - float32(len(cols)-1)
+	for i := range cols {
+		flexMin -= cols[i].width
+	}
+	flexMin = max(0, flexMin)
+	for i := range cols {
+		if width := a.columnWidths[a.page][cols[i].title]; width > 0 {
+			old := cols[i].width
+			if old == 0 {
+				old = flexMin
+			}
+			minW += width - old
+			cols[i].width = width
+		}
+	}
+	return minW, flexMin
+}
+
+const minColumnWidth = 40
+
 // cell is a table cell's box.
 func cell(c *ui.Context, col *column) ui.Element {
 	e := ui.Row(c).FillHeight().AlignItems(ui.Center).Padding(0, 10).Clip()
@@ -116,14 +140,16 @@ func cell(c *ui.Context, col *column) ui.Element {
 // chevron at the top), in an element that scrolls sideways with the rows;
 // the index of the column clicked, or -1. A table that isn't sortable has
 // titles that don't light up.
-func tableHeader(c *ui.Context, k *colors, cols []column, sorted int, ascending bool, h, minW float32, sortable bool, menu func(m *ui.Menu)) (int, ui.Element) {
+func (a *App) tableHeader(c *ui.Context, k *colors, cols []column, sorted int, ascending bool, h float32, minW *float32, flexMin float32, sortable bool, menu func(m *ui.Menu)) (int, ui.Element) {
 	clicked := -1
 	clip := ui.Row(c).FillWidth().Height(h).Clip().Shrink(0)
 	if menu != nil {
 		clip.ContextMenu(menu)
 	}
 	clip.Children(func() {
-		ui.Row(c).FillWidth().MinWidth(minW).Height(h).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Shrink(0).Children(func() {
+		inner := ui.Row(c).FillWidth().MinWidth(*minW).Height(h).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Shrink(0)
+		inner.Children(func() {
+			var heads [detailColumnCount + 1]ui.Element
 			for i := range cols {
 				col := &cols[i]
 				if i > 0 {
@@ -140,6 +166,7 @@ func tableHeader(c *ui.Context, k *colors, cols []column, sorted int, ascending 
 				} else {
 					d = ui.Box(c.Key(col.title))
 				}
+				heads[i] = d
 				d.Column().FillHeight().Padding(0, 10, 7, 10).Gap(0)
 				if col.width > 0 {
 					d.Width(col.width).Shrink(0)
@@ -181,9 +208,38 @@ func tableHeader(c *ui.Context, k *colors, cols []column, sorted int, ascending 
 					} else {
 						t.TextColor(k.secondary)
 					}
+					// A separate hit target keeps resizing from triggering sorting.
+					edge := ui.Box(c.Key("resize")).Absolute().Top(0).Bottom(0).End(0).Width(8).Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
+					if dx, _, held := edge.Dragged(); held && dx != 0 {
+						if a.columnWidths[a.page] == nil {
+							a.columnWidths[a.page] = make(map[string]float32)
+						}
+						// Keep earlier flexible columns in place as this edge moves.
+						for j := 0; j < i; j++ {
+							if cols[j].width == 0 {
+								w := max(minColumnWidth, heads[j].Bounds().W)
+								cols[j].width = w
+								a.columnWidths[a.page][cols[j].title] = w
+								*minW += w - flexMin
+								heads[j].Width(w).Grow(0).Shrink(0)
+							}
+						}
+						old := col.width
+						width := old
+						if width == 0 {
+							width = d.Bounds().W
+							old = flexMin
+						}
+						width = max(minColumnWidth, width+dx)
+						a.columnWidths[a.page][col.title] = width
+						col.width = width
+						*minW += width - old
+						d.Width(width).Grow(0).Shrink(0)
+					}
 				})
 			}
 		})
+		inner.MinWidth(*minW)
 	})
 	ui.Box(c).FillWidth().Height(1).Background(k.divider).Shrink(0)
 	return clicked, clip

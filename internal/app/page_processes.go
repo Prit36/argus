@@ -19,7 +19,13 @@ const (
 )
 
 func (a *App) processesPage(c *ui.Context, k *colors) {
-	a.processCommands(c, k)
+	rows := a.model.Rows
+	a.selIdx = selectedProcessIndex(rows, a.selected)
+	var selected *Row
+	if a.selIdx >= 0 {
+		selected = &rows[a.selIdx]
+	}
+	a.processCommands(c, k, selected)
 	var shownCols [procColumnCount]ProcCol
 	shownList := shownCols[:0]
 	for col := ProcCol(0); col < procColumnCount; col++ {
@@ -67,23 +73,18 @@ func (a *App) processesPage(c *ui.Context, k *colors) {
 			sorted = i
 		}
 	}
-	clicked, header := tableHeader(c, k, cols, sorted, a.ascending, headerH, minW, true, a.procColumnsMenu)
+	minW, flexMin := a.applyColumnWidths(cols, minW)
+	clicked, header := a.tableHeader(c, k, cols, sorted, a.ascending, headerH, &minW, flexMin, true, a.procColumnsMenu)
 	if clicked >= 0 {
 		a.sortBy(keys[clicked])
 		a.refreshRows()
+		rows = a.model.Rows
+		a.selIdx = selectedProcessIndex(rows, a.selected)
 	}
 	if shown(a.set.ProcColumns, pcNetwork) && !a.netmon.Available {
 		header.Tooltip("Per-process network usage is unavailable. Restart as administrator to try tracing.")
 	} else if shown(a.set.ProcColumns, pcNetwork) && a.netmon.UsesEnergy() {
 		header.Tooltip("Network usage uses Windows counters. A dash means one or more processes could not be read.")
-	}
-	rows := a.model.Rows
-	// The list's choice is the selected key's row, wherever it is now.
-	a.selIdx = -1
-	for i := range rows {
-		if rows[i].Key == a.selected && rows[i].Kind != RowHeader {
-			a.selIdx = i
-		}
 	}
 	prev := a.selIdx
 	s := &a.procList
@@ -138,6 +139,18 @@ func (a *App) processesPage(c *ui.Context, k *colors) {
 	}
 }
 
+// selectedProcessIndex finds the selection once for the current frame.
+func selectedProcessIndex(rows []Row, key uint64) int {
+	if key != 0 {
+		for i := range rows {
+			if rows[i].Kind != RowHeader && rows[i].Key == key {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
 func (a *App) procRowKey(i int) any {
 	if i < len(a.model.Rows) {
 		return a.model.Rows[i].Key
@@ -156,15 +169,14 @@ func (a *App) procRowLabel(i int) string {
 	return ""
 }
 
-func (a *App) processCommands(c *ui.Context, k *colors) {
+func (a *App) processCommands(c *ui.Context, k *colors, sel *Row) {
 	pageHeader(c, k, "Processes", func() {
 		compact := a.narrowerThan(c, 880)
-		sel := a.selectedRow()
 		if commandButton(c, k, command{icon: icRun, label: "Run new task", enabled: true, compact: compact}) {
 			a.openRun()
 		}
 		separator(c, k)
-		explorer := a.selectedIsExplorer()
+		explorer := sel != nil && a.isExplorerProcess(&a.sampler.Procs[sel.Proc])
 		end := command{icon: icEndTask, label: "End task", enabled: sel != nil, compact: compact}
 		if explorer {
 			end.icon, end.label = icRestart, "Restart"
@@ -196,7 +208,7 @@ func (a *App) processRow(c *ui.Context, k *colors, r *Row, shownList []ProcCol, 
 		}
 	}
 	p := &a.sampler.Procs[r.Proc]
-	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider)
+	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider)
 	hovered := row.Hovered()
 	if sel {
 		row.Background(k.rowSelected)

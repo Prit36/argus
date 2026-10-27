@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo"
 	"golang.org/x/sys/windows"
 
+	"taskmgr/internal/sys"
 	"taskmgr/internal/winapi"
 )
 
@@ -326,7 +327,10 @@ var (
 // isExplorer reports whether pid is the shell (Windows Explorer), whose
 // "End task" is "Restart".
 func (a *App) isExplorer(pid uint32) bool {
-	p := a.sampler.ByPID(pid)
+	return a.isExplorerProcess(a.sampler.ByPID(pid))
+}
+
+func (a *App) isExplorerProcess(p *sys.Proc) bool {
 	if p == nil || !strings.EqualFold(p.Info.Name, "explorer.exe") {
 		return false
 	}

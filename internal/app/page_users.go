@@ -52,7 +52,8 @@ func (a *App) usersPage(c *ui.Context, k *colors) {
 		}
 	})
 	cols := userCols
-	_, header := tableHeader(c, k, cols[:], -1, true, compactHeaderH, 760, false, nil)
+	minW, flexMin := a.applyColumnWidths(cols[:], 760)
+	_, header := a.tableHeader(c, k, cols[:], -1, true, compactHeaderH, &minW, flexMin, false, nil)
 	totalMem := float32(max(1, a.mem.Total))
 	if len(a.userRows) == 0 && a.query != "" {
 		empty(c, k, noResults(a.query))
@@ -60,7 +61,7 @@ func (a *App) usersPage(c *ui.Context, k *colors) {
 	}
 	a.usersList.Key = a.userRowKey
 	a.usersList.KeepOffset = true
-	a.tableList(c, "users-table", &a.usersList, len(a.userDisplay), 760, header, func(lr ui.ListRow) {
+	a.tableList(c, "users-table", &a.usersList, len(a.userDisplay), minW, header, func(lr ui.ListRow) {
 		i := a.userDisplay[lr.Index]
 		if i < 0 {
 			s := &a.sessions[-1-i]
@@ -187,7 +188,7 @@ func (a *App) toggleUser(id uint32) {
 func (a *App) userRow(c *ui.Context, k *colors, s *sys.Session, sum *userSum, cols []column, totalMem float32) {
 	sel := a.hasUserSel && a.userSel == s.ID && a.userProcSel == 0
 	id := s.ID
-	row := ui.ButtonBase(c).FillWidth().Height(rowH+6).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
+	row := ui.ButtonBase(c).FillWidth().Height(rowH+6).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider).FocusRing(false)
 	selectionOutline(row, k, sel)
 	hovered := row.Hovered()
 	switch {
@@ -253,7 +254,7 @@ func (a *App) userProgram(c *ui.Context, k *colors, p *sys.Proc, cols []column, 
 	session := p.Session
 	key := procKey(p)
 	sel := a.userProcSel == key
-	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).FocusRing(false)
+	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(rowH).Justify(ui.Start).AlignItems(ui.Stretch).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider).FocusRing(false)
 	selectionOutline(row, k, sel)
 	hovered := row.Hovered()
 	switch {

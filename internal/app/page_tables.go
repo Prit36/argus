@@ -50,7 +50,8 @@ func (a *App) servicesPage(c *ui.Context, k *colors) {
 		}
 	})
 	cols := serviceCols
-	clicked, header := tableHeader(c, k, cols[:], int(a.servicesSort), a.servicesAsc, compactHeaderH, 820, true, nil)
+	minW, flexMin := a.applyColumnWidths(cols[:], 820)
+	clicked, header := a.tableHeader(c, k, cols[:], int(a.servicesSort), a.servicesAsc, compactHeaderH, &minW, flexMin, true, nil)
 	if clicked >= 0 {
 		a.servicesSortBy(uint8(clicked))
 		a.refreshRows()
@@ -78,7 +79,7 @@ func (a *App) servicesPage(c *ui.Context, k *colors) {
 		s.ScrollTo(a.serviceIdx, ui.Center)
 	}
 	a.revealSvc = false
-	l := a.tableList(c, "services-table", s, len(a.servicesRows), 820, header, func(lr ui.ListRow) {
+	l := a.tableList(c, "services-table", s, len(a.servicesRows), minW, header, func(lr ui.ListRow) {
 		a.serviceRow(lr.Context, k, &list[a.servicesRows[lr.Index]], cols[:])
 	})
 	l.ContextMenu(a.serviceMenu)
@@ -104,7 +105,7 @@ func (a *App) serviceRowKey2(i int) string {
 
 func (a *App) serviceRow(c *ui.Context, k *colors, s *sys.Service, cols []column) {
 	marked := a.servicesPID != 0 && s.PID == a.servicesPID
-	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider)
+	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider)
 	if marked {
 		row.Background(k.rowSelected)
 	}
@@ -219,7 +220,8 @@ func (a *App) startupPage(c *ui.Context, k *colors) {
 	items := a.startup
 	q := strings.TrimSpace(a.query)
 	cols := startupCols
-	clicked, header := tableHeader(c, k, cols[:], int(a.startupSort), a.startupAsc, compactHeaderH, 760, true, nil)
+	minW, flexMin := a.applyColumnWidths(cols[:], 760)
+	clicked, header := a.tableHeader(c, k, cols[:], int(a.startupSort), a.startupAsc, compactHeaderH, &minW, flexMin, true, nil)
 	if clicked >= 0 {
 		if int(a.startupSort) == clicked {
 			a.startupAsc = !a.startupAsc
@@ -249,7 +251,7 @@ func (a *App) startupPage(c *ui.Context, k *colors) {
 	s := &a.startupList
 	s.Selected = &a.startupIdx
 	s.Key = a.startupRowKey
-	l := a.tableList(c, "startup-table", s, len(a.startupOrder), 760, header, func(lr ui.ListRow) {
+	l := a.tableList(c, "startup-table", s, len(a.startupOrder), minW, header, func(lr ui.ListRow) {
 		i := int(a.startupOrder[lr.Index])
 		a.startupRow(lr.Context, k, &items[i], i, cols[:])
 	})
@@ -283,7 +285,7 @@ func (a *App) startupItem() *sys.StartupItem {
 }
 
 func (a *App) startupRow(c *ui.Context, k *colors, it *sys.StartupItem, i int, cols []column) {
-	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider)
+	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider)
 	row.ContextMenu(func(m *ui.Menu) {
 		a.startupSel = i
 		a.startupMenu(m)
@@ -366,7 +368,8 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 	})
 	q := strings.TrimSpace(a.query)
 	cols := historyCols
-	clicked, header := tableHeader(c, k, cols[:], int(a.historySort), a.historyAsc, compactHeaderH, 560, true, nil)
+	minW, flexMin := a.applyColumnWidths(cols[:], 560)
+	clicked, header := a.tableHeader(c, k, cols[:], int(a.historySort), a.historyAsc, compactHeaderH, &minW, flexMin, true, nil)
 	if clicked >= 0 {
 		if int(a.historySort) == clicked {
 			a.historyAsc = !a.historyAsc
@@ -387,10 +390,10 @@ func (a *App) historyPage(c *ui.Context, k *colors) {
 	}
 	s := &a.historyList
 	s.Key = a.historyRowKey
-	a.tableList(c, "history-table", s, len(a.historyRows), 560, header, func(lr ui.ListRow) {
+	a.tableList(c, "history-table", s, len(a.historyRows), minW, header, func(lr ui.ListRow) {
 		c := lr.Context
 		e := &h.List[a.historyRows[lr.Index]]
-		ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider).Tooltip(e.Path).Children(func() {
+		ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider).Tooltip(e.Path).Children(func() {
 			cell(c, &cols[0]).Gap(8).Children(func() {
 				a.exeIcon(c, e.Exe)
 				ui.Text(c, e.Title).FontSize(fontCaption).TextColor(k.text).SingleLine()

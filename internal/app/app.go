@@ -185,17 +185,18 @@ type App struct {
 	// windir is the Windows folder, lower-cased with its trailing slash.
 	windir string
 
-	set         Settings
-	k           colors
-	themeAccent accent
-	uiTheme     *ui.Theme
-	listTheme   *ui.Theme
-	page        Page
-	perfSummary bool
-	darkSystem  bool
-	accent      accent
-	active      bool
-	maximized   bool
+	set          Settings
+	k            colors
+	themeAccent  accent
+	uiTheme      *ui.Theme
+	listTheme    *ui.Theme
+	page         Page
+	columnWidths [PageAppHistory + 1]map[string]float32
+	perfSummary  bool
+	darkSystem   bool
+	accent       accent
+	active       bool
+	maximized    bool
 
 	// Processes.
 	sort      Sort

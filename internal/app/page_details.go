@@ -14,9 +14,18 @@ import (
 // column.
 
 func (a *App) detailsPage(c *ui.Context, k *colors) {
+	list := a.sampler.Procs
+	a.detailsIdx = selectedDetailIndex(list, a.details, a.detailsSel)
+	var selected *sys.Proc
+	if a.detailsIdx >= 0 {
+		selected = &list[a.details[a.detailsIdx]]
+	} else if a.detailsSel != 0 {
+		// A selected process can still exist outside the current search.
+		selected = a.procByKey(a.detailsSel)
+	}
 	pageHeader(c, k, "Details", func() {
 		compact := a.narrowerThan(c, 880)
-		sel := a.detailsSelected() != nil
+		sel := selected != nil
 		if commandButton(c, k, command{icon: icRun, label: "Run new task", enabled: true, compact: compact}) {
 			a.openRun()
 		}
@@ -25,8 +34,8 @@ func (a *App) detailsPage(c *ui.Context, k *colors) {
 			a.endDetails(false)
 		}
 		if commandButton(c, k, command{icon: icProperties, label: "Properties", enabled: sel, compact: compact}) {
-			if p := a.detailsSelected(); p != nil {
-				a.properties(p.Info.Path())
+			if selected != nil {
+				a.properties(selected.Info.Path())
 			}
 		}
 		if commandButton(c, k, command{icon: icEfficiency, label: "Efficiency mode", enabled: sel, compact: compact}) {
@@ -57,21 +66,16 @@ func (a *App) detailsPage(c *ui.Context, k *colors) {
 			sorted = i
 		}
 	}
-	clicked, header := tableHeader(c, k, cols, sorted, a.detailsAsc, compactHeaderH, minW, true, a.detailColumnsMenu)
+	minW, flexMin := a.applyColumnWidths(cols, minW)
+	clicked, header := a.tableHeader(c, k, cols, sorted, a.detailsAsc, compactHeaderH, &minW, flexMin, true, a.detailColumnsMenu)
 	if clicked >= 0 {
 		a.detailsSortBy(keys[clicked])
 		a.refreshRows()
+		a.detailsIdx = selectedDetailIndex(list, a.details, a.detailsSel)
 	}
 	if len(a.details) == 0 && a.query != "" {
 		empty(c, k, noResults(a.query))
 		return
-	}
-	list := a.sampler.Procs
-	a.detailsIdx = -1
-	for i, pi := range a.details {
-		if procKey(&list[pi]) == a.detailsSel {
-			a.detailsIdx = i
-		}
 	}
 	s := &a.detailsList
 	s.Selected = &a.detailsIdx
@@ -89,6 +93,19 @@ func (a *App) detailsPage(c *ui.Context, k *colors) {
 	if l.Changed() && a.detailsIdx >= 0 && a.detailsIdx < len(a.details) {
 		a.detailsSel = procKey(&list[a.details[a.detailsIdx]])
 	}
+}
+
+// selectedDetailIndex looks up the current visible selection without storing
+// an additional index or cache between frames.
+func selectedDetailIndex(list []sys.Proc, order []int32, key uint64) int {
+	if key != 0 {
+		for i, pi := range order {
+			if procKey(&list[pi]) == key {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func (a *App) detailsRowKey(i int) any {
@@ -114,7 +131,7 @@ func (a *App) detailsSelected() *sys.Proc {
 
 func (a *App) detailsRow(c *ui.Context, k *colors, p *sys.Proc, shownList []DetailCol, cols []column) {
 	key := procKey(p)
-	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Dividers(1, k.cellDivider)
+	row := ui.Row(c).FillWidth().Height(rowH).AlignItems(ui.Center).Padding(0, 14, 0, pagePad-10).Gap(1).Dividers(1, k.cellDivider)
 	row.ContextMenu(func(m *ui.Menu) {
 		a.detailsSel = key
 		a.detailsMenu(m)
