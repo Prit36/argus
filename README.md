@@ -14,6 +14,25 @@ Argus is an independent project. It is not affiliated with, endorsed by,
 or sponsored by Microsoft. Microsoft and Windows are trademarks of the
 Microsoft group of companies.
 
+## Screenshots
+
+Rendered from Argus's interface using sample process and performance data.
+
+![Argus Processes page in dark theme, showing grouped processes and resource usage](docs/screenshots/processes-dark.png)
+
+<details>
+<summary>Performance and light theme</summary>
+
+**Performance**
+
+![Argus Performance page in dark theme, showing CPU history and hardware summaries](docs/screenshots/performance-dark.png)
+
+**Light theme**
+
+![Argus Processes page in light theme](docs/screenshots/processes-light.png)
+
+</details>
+
 ## Quality of life
 
 - Clicking a Processes column sorts across Apps, Background and Windows
