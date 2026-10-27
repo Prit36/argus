@@ -18,9 +18,10 @@ Microsoft group of companies.
 
 Rendered from Argus's interface using sample process and performance data.
 
-| Processes | Performance |
-| :---: | :---: |
-| ![Argus Processes page in dark theme, showing grouped processes and resource usage](docs/screenshots/processes-dark.png) | ![Argus Performance page in dark theme, showing CPU history and hardware summaries](docs/screenshots/performance-dark.png) |
+<p align="center">
+  <a href="docs/screenshots/processes-dark.png"><img src="docs/screenshots/processes-dark.png" width="49%" alt="Argus Processes page in dark theme"></a>
+  <a href="docs/screenshots/performance-dark.png"><img src="docs/screenshots/performance-dark.png" width="49%" alt="Argus Performance page in dark theme"></a>
+</p>
 
 <details>
 <summary>Light theme</summary>
