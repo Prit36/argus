@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unsafe"
@@ -314,11 +315,9 @@ var (
 		}
 		var pid uint32
 		windows.GetWindowThreadProcessId(h, &pid)
-		for _, p := range switchCallbackPIDs {
-			if p == pid {
-				switchFound = h
-				return 0
-			}
+		if slices.Contains(switchCallbackPIDs, pid) {
+			switchFound = h
+			return 0
 		}
 		return 1
 	})

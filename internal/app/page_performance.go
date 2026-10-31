@@ -468,7 +468,7 @@ func signalStrength(c *ui.Context, k *colors, quality uint32) {
 			ui.Text(c, "Signal strength:").FontSize(fontSmall).TextColor(k.secondary).SingleLine()
 		})
 		ui.Row(c).AlignItems(ui.End).Gap(2).Tooltip(value).Children(func() {
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				color := k.network.Alpha(0.25)
 				if quality > uint32(i*20) {
 					color = k.network

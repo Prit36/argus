@@ -696,7 +696,7 @@ func EnumAdapters() []Adapter {
 	}
 	defer comRelease(factory)
 	var out []Adapter
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		var adapter unsafe.Pointer
 		// IDXGIFactory1::EnumAdapters1.
 		if int32(comCall(factory, 12, uintptr(i), uintptr(unsafe.Pointer(&adapter)))) < 0 || adapter == nil {

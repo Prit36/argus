@@ -260,7 +260,7 @@ func (a *App) viewMenu(m *ui.Menu) {
 
 // procColumnsMenu chooses the Processes page's columns.
 func (a *App) procColumnsMenu(m *ui.Menu) {
-	for col := ProcCol(0); col < procColumnCount; col++ {
+	for col := range procColumnCount {
 		if m.Item(procColumns[col].title).Checked(shown(a.set.ProcColumns, col)).Chosen() {
 			a.set.ProcColumns ^= 1 << col
 			a.dirty = true
@@ -272,7 +272,7 @@ func (a *App) procColumnsMenu(m *ui.Menu) {
 
 // detailColumnsMenu chooses the Details page's columns.
 func (a *App) detailColumnsMenu(m *ui.Menu) {
-	for col := DetailCol(0); col < detailColumnCount; col++ {
+	for col := range detailColumnCount {
 		if m.Item(detailColumns[col].title).Checked(shown(a.set.DetailColumns, col)).Chosen() {
 			a.set.DetailColumns ^= 1 << col
 			a.saveSettings()

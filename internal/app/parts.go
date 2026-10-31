@@ -215,7 +215,7 @@ func (a *App) tableHeader(c *ui.Context, k *colors, cols []column, sorted int, a
 							a.columnWidths[a.page] = make(map[string]float32)
 						}
 						// Keep earlier flexible columns in place as this edge moves.
-						for j := 0; j < i; j++ {
+						for j := range i {
 							if cols[j].width == 0 {
 								w := max(minColumnWidth, heads[j].Bounds().W)
 								cols[j].width = w

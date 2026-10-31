@@ -181,8 +181,8 @@ func programOf(cmd string) string {
 	if i := strings.Index(strings.ToLower(t), ".exe"); i >= 0 {
 		return t[:i+4]
 	}
-	if sp := strings.IndexByte(t, ' '); sp >= 0 {
-		return t[:sp]
+	if before, _, ok := strings.Cut(t, " "); ok {
+		return before
 	}
 	return t
 }

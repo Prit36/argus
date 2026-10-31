@@ -28,7 +28,7 @@ func (a *App) processesPage(c *ui.Context, k *colors) {
 	a.processCommands(c, k, selected)
 	var shownCols [procColumnCount]ProcCol
 	shownList := shownCols[:0]
-	for col := ProcCol(0); col < procColumnCount; col++ {
+	for col := range procColumnCount {
 		if shown(a.set.ProcColumns, col) {
 			shownList = append(shownList, col)
 		}

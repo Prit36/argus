@@ -383,7 +383,7 @@ func (m *Model) matches(p *sys.Proc, i int32, q string) bool {
 // under, else the oldest of the same program it was started by.
 func (m *Model) groupOf(list []sys.Proc, i int32, windir string) (key uint64, cat Category, root int32) {
 	cur := i
-	for depth := 0; depth < 64; depth++ {
+	for range 64 {
 		p := &list[cur]
 		if p.Windowed {
 			return maphash.String(seed, p.Info.File()) ^ 1, CatApps, cur
@@ -404,7 +404,7 @@ func (m *Model) groupOf(list []sys.Proc, i int32, windir string) (key uint64, ca
 		cat = CatWindows
 	}
 	root = i
-	for depth := 0; depth < 64; depth++ {
+	for range 64 {
 		parent, ok := m.parentOf(list, root)
 		if !ok || list[parent].Info.File() != list[root].Info.File() || isWindows(&list[parent], windir) != windows {
 			break

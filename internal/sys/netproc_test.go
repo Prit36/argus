@@ -79,12 +79,12 @@ func TestNetworkEnergyLiveUDP(t *testing.T) {
 	}
 	defer conn.Close()
 	request := []byte{0xab, 0xcd, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0, 0, 1, 0, 1}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, err := conn.Write(request); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		time.Sleep(time.Second)
 		m.SampleEnergy(p, 1)
 		if p[0].NetKnown && p[0].NetDelta > 0 {

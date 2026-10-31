@@ -228,9 +228,9 @@ func (g *gpuCounters) engines(r *GPUReading) {
 		v := float32(it.Value.Value)
 		sums[ai][eng] += v
 		kind := uint8(GPUKindOther)
-		if k := strings.Index(name, "_engtype_"); k >= 0 {
+		if _, after, ok := strings.Cut(name, "_engtype_"); ok {
 			for ki, ek := range engineKinds {
-				if name[k+9:] == ek {
+				if after == ek {
 					kind = uint8(ki)
 				}
 			}
@@ -297,11 +297,11 @@ func asciiName(buf []byte, p *uint16) string {
 // adapterOf is the adapter an instance ("…luid_0x00000000_0x0000D3B2_phys_0…")
 // is of, or -1.
 func (g *gpuCounters) adapterOf(name string) int {
-	at := strings.Index(name, "luid_0x")
-	if at < 0 {
+	_, after, ok := strings.Cut(name, "luid_0x")
+	if !ok {
 		return -1
 	}
-	s := name[at+7:]
+	s := after
 	if len(s) < 19 {
 		return -1
 	}

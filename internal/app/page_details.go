@@ -44,7 +44,7 @@ func (a *App) detailsPage(c *ui.Context, k *colors) {
 	})
 	var shownCols [detailColumnCount]DetailCol
 	shownList := shownCols[:0]
-	for col := DetailCol(0); col < detailColumnCount; col++ {
+	for col := range detailColumnCount {
 		if shown(a.set.DetailColumns, col) {
 			shownList = append(shownList, col)
 		}
