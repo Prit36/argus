@@ -1,26 +1,49 @@
-# Argus
+<p align="center">
+  <img src="resources/icon.png" width="128" alt="Argus logo">
+</p>
 
-Version 0.0.2 · [Download for Windows](https://github.com/Prit36/argus/releases/tag/v0.0.2)
-
-A native Windows process monitor inspired by Windows 11 Task Manager,
-written in Go with the [mygo](https://github.com/egoist/mygo) native UI.
-Argus includes Processes (grouped
-apps / background / Windows processes, heat-colored cells, column
-chooser), Performance (CPU, memory, disks, network adapters and GPUs with
-60-second graphs), App history, Startup apps, Users, Details, Services
-and Settings, plus the tray CPU meter.
-
-Argus is an independent project. It is not affiliated with, endorsed by,
-or sponsored by Microsoft. Microsoft and Windows are trademarks of the
-Microsoft group of companies.
-
-## Screenshots
-
-Rendered from Argus's interface using sample process and performance data.
+<h1 align="center">Argus</h1>
 
 <p align="center">
-  <a href="docs/screenshots/processes-dark.png"><img src="docs/screenshots/processes-dark.png" width="49%" alt="Argus Processes page in dark theme"></a>
-  <a href="docs/screenshots/performance-dark.png"><img src="docs/screenshots/performance-dark.png" width="49%" alt="Argus Performance page in dark theme"></a>
+  <b>A fast, native process monitor for Windows.</b><br>
+  Everything you'd reach for in Task Manager, in a light Go app that uses ~0.5% of one core.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Prit36/argus/releases/latest"><img src="https://img.shields.io/github/v/release/Prit36/argus?include_prereleases&label=download" alt="Download"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20x64-0078d4" alt="Windows x64">
+  <img src="https://img.shields.io/badge/Go-1.27-00add8" alt="Go 1.27">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/processes-dark.png" width="820" alt="Argus Processes page in dark theme">
+</p>
+
+Argus shows what your PC is doing — every process, how hard each part of the
+hardware is working, and what starts with Windows — in a native window drawn
+with [mygo](https://github.com/egoist/mygo). No webview, no runtime to install,
+and it stays out of the way: about 44 MB of memory and frames in 1–2 ms.
+
+## Features
+
+- **Processes**, grouped into apps, background and Windows processes, with
+  heat-coloured CPU, memory, disk, network and GPU cells, a column chooser,
+  and sorting that's remembered between launches.
+- **Performance**: CPU, memory, disks, network adapters (including Wi-Fi signal
+  and connection type) and GPUs, each with a 60-second graph.
+- **Per-process network use**, from an ETW trace when permitted, or Windows'
+  own counters without elevation.
+- **App history, Startup apps, Users, Details and Services**, with start/stop
+  actions that report progress and the real Windows error.
+- **Safe process control**: end tasks with confirmation and identity checks,
+  create memory dumps, open file location, search online.
+- **Keyboard friendly**: search any page, Ctrl+P to pause updates, F5 to refresh
+  once, Ctrl+C to copy a row or the machine summary.
+- **Tray CPU meter**, light and dark themes, and lower sampling while minimized.
+
+<p align="center">
+  <img src="docs/screenshots/performance-dark.png" width="820" alt="Argus Performance page in dark theme">
 </p>
 
 <details>
@@ -30,7 +53,21 @@ Rendered from Argus's interface using sample process and performance data.
 
 </details>
 
+## Install
+
+Download from [Releases](https://github.com/Prit36/argus/releases/latest):
+
+- `Argus-Setup-<version>-amd64.exe` — installer, or
+- `Argus-<version>-windows-amd64-portable.zip` — unzip and run `Argus.exe`.
+
+> If Windows SmartScreen warns on first run, choose **More info → Run anyway**.
+
+Argus is an independent project. It is not affiliated with, endorsed by,
+or sponsored by Microsoft. Microsoft and Windows are trademarks of the
+Microsoft group of companies.
+
 ## Quality of life
+
 
 - Clicking a Processes column sorts across Apps, Background and Windows
   processes. Use View → Group by type to show category sections again.
