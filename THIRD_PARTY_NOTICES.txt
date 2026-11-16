@@ -11,7 +11,7 @@ Collected from the installed Go module sources for this release.
 Review and update this file after changing dependencies or the Go toolchain.
 
 ========================================================================
-Go runtime go1.27.3
+Go runtime go1.27.4
 ========================================================================
 
 Copyright 2009 The Go Authors.
@@ -43,7 +43,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-github.com/ebitengine/purego v0.11.2
+github.com/ebitengine/purego v0.11.3
 ========================================================================
 
 SPDX-FileCopyrightText: 2022 The Ebitengine Authors
@@ -254,7 +254,7 @@ SPDX-FileCopyrightText: 2026 The Ebitengine Authors
    limitations under the License.
 
 ========================================================================
-github.com/egoist/mygo v0.7.3
+github.com/egoist/mygo v0.9.2
 ========================================================================
 
 
@@ -281,7 +281,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-github.com/egoist/mygo v0.7.3 / internal/shader/LICENSE
+github.com/egoist/mygo v0.9.2 / internal/shader/LICENSE
 ========================================================================
 
                                  Apache License
@@ -587,7 +587,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================
-golang.org/x/image v0.47.0
+golang.org/x/image v0.48.0
 ========================================================================
 
 Copyright 2011 The Go Authors. All rights reserved.
@@ -625,7 +625,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-golang.org/x/image v0.47.0 / PATENTS
+golang.org/x/image v0.48.0 / PATENTS
 ========================================================================
 
 Additional IP Rights Grant (Patents)
@@ -713,7 +713,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ========================================================================
-golang.org/x/sys v0.49.0
+golang.org/x/sys v0.50.0
 ========================================================================
 
 Copyright 2009 The Go Authors. All rights reserved.
@@ -754,7 +754,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-golang.org/x/sys v0.49.0 / PATENTS
+golang.org/x/sys v0.50.0 / PATENTS
 ========================================================================
 
 Additional IP Rights Grant (Patents)
@@ -781,7 +781,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ========================================================================
-golang.org/x/text v0.43.0
+golang.org/x/text v0.44.0
 ========================================================================
 
 Copyright 2013 The Go Authors. All rights reserved.
@@ -819,7 +819,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ========================================================================
-golang.org/x/text v0.43.0 / PATENTS
+golang.org/x/text v0.44.0 / PATENTS
 ========================================================================
 
 Additional IP Rights Grant (Patents)

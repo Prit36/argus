@@ -101,7 +101,7 @@ scripts\build.ps1 -Dev     # build\dev\Argus.exe, with a console for logs
 scripts\build.ps1 -Test    # go vet + go test
 ```
 
-Build on Windows with Go 1.27.3 or later, as specified in `go.mod`.
+Build on Windows with Go 1.27.4 or later, as specified in `go.mod`.
 The mygo build tool is pinned in `go.mod`; no separate global installation
 is needed. `mygo build` embeds the Argus icon, a per-monitor-DPI manifest
 and version information. The build script removes local source paths
